@@ -9,11 +9,11 @@ const hostname = window.location.hostname;
 
 // 防止多次初始化
 if ((window as any).__HACHIMI_INITIALIZED__) {
-  logger.info('Surfing Hachimi already initialized, skipping...');
+  logger.info('哈基米冲浪助手 (Surfing Hachimi) already initialized, skipping...');
 } else {
   (window as any).__HACHIMI_INITIALIZED__ = true;
 
-  logger.info('🚀 Surfing Hachimi Activated', {
+  logger.info('🚀 哈基米冲浪助手 (Surfing Hachimi) Activated', {
     platform: hostname.includes('zhihu.com') ? 'Zhihu' : 'Bilibili',
     time: new Date().toLocaleTimeString()
   });

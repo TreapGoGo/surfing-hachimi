@@ -86,7 +86,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: chrome.runtime.Messa
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Surfing Hachimi installed');
+  console.log('哈基米冲浪助手 (Surfing Hachimi) installed');
   // Set side panel behavior
   if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
       chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })

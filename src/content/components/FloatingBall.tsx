@@ -12,7 +12,7 @@ export default function FloatingBall() {
            chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' });
         }}
         className="w-12 h-12 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-all hover:scale-110 active:scale-95"
-        title="冲浪哈基米"
+        title="哈基米冲浪助手"
       >
         <Zap size={24} />
       </button>

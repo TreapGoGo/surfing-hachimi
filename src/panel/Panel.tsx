@@ -12,7 +12,7 @@ export default function Panel() {
       <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            🏄 冲浪哈基米
+            🏄 哈基米冲浪助手
           </h1>
           <div className="text-xs text-slate-500">近 24h: {items.length} 条</div>
         </div>

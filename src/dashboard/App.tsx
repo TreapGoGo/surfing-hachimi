@@ -36,9 +36,9 @@ export default function App() {
           {/* Header */}
           <div className="flex items-center justify-between mb-8 max-w-5xl mx-auto">
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">冲浪足迹</h1>
+              <h1 className="text-2xl font-bold text-slate-800">哈基米冲浪助手</h1>
               <p className="text-slate-500 text-sm mt-1">
-                {loading ? '正在加载...' : `${items.length} 条真实记录`}
+                {loading ? '正在加载...' : `${items.length} 条真实足迹`}
               </p>
             </div>
             
