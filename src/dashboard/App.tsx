@@ -105,6 +105,9 @@ export default function App() {
   useEffect(() => {
     loadData();
     
+    // 通知后台侧边栏已挂载
+    chrome.runtime.sendMessage({ type: 'SIDE_PANEL_MOUNTED' });
+
     // 初始化设置
     getSettings().then(settings => {
       applySettingsToDOM(settings);
@@ -154,6 +157,8 @@ export default function App() {
       window.removeEventListener('hachimi-toast' as any, handleToastEvent);
       chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
       document.removeEventListener('mousedown', handleClickOutside);
+      // 通知后台侧边栏已卸载
+      chrome.runtime.sendMessage({ type: 'SIDE_PANEL_UNMOUNTED' });
     };
   }, []);
 

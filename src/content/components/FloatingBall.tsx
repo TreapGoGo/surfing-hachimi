@@ -56,6 +56,7 @@ export default function FloatingBall() {
 
     try {
       // 发送切换侧边栏的消息
+      // 由于后台脚本中的逻辑现在是同步的，这应该能满足用户手势要求
       chrome.runtime.sendMessage({ type: 'TOGGLE_SIDE_PANEL' }).catch(err => {
         console.warn('[Hachimi] 发送消息失败，可能插件已更新:', err);
       });
