@@ -11,7 +11,15 @@ export class BilibiliCollector {
       const title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') || document.title;
       const cover = document.querySelector('meta[property="og:image"]')?.getAttribute('content') || '';
       const url = document.querySelector('meta[property="og:url"]')?.getAttribute('content') || window.location.href;
-      const author = document.querySelector('meta[name="author"]')?.getAttribute('content') || '';
+      const authorName = document.querySelector('meta[name="author"]')?.getAttribute('content') || '';
+      let authorUrl = '';
+      const upLink = document.querySelector('.up-name, .name-text, a[href*="space.bilibili.com"]') as HTMLAnchorElement;
+      if (upLink) {
+        authorUrl = upLink.href;
+        if (authorUrl && authorUrl.startsWith('//')) {
+          authorUrl = 'https:' + authorUrl;
+        }
+      }
       
       const desc = document.querySelector('meta[name="description"]')?.getAttribute('content') || '';
 
@@ -29,7 +37,8 @@ export class BilibiliCollector {
         url,
         cover: cover.replace('http:', 'https:'),
         author: {
-          name: author,
+          name: authorName,
+          url: authorUrl
         },
         contentExcerpt: desc.slice(0, 150),
         metadata: {

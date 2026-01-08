@@ -98,10 +98,17 @@ export class ZhihuCollector {
       }
 
       // 5. 提取作者
-      let author = zopData.authorName || '';
-      if (!author) {
-        const authorEl = targetEl.querySelector('.UserLink-link, .AuthorInfo-name');
-        if (authorEl) author = authorEl.textContent?.trim() || '';
+      let authorName = zopData.authorName || '';
+      let authorUrl = '';
+      
+      const authorEl = targetEl.querySelector('.UserLink-link, .AuthorInfo-name a, a[href*="/people/"]') as HTMLAnchorElement;
+      if (authorEl) {
+        if (!authorName) authorName = authorEl.textContent?.trim() || '';
+        authorUrl = authorEl.href;
+        // 处理相对路径
+        if (authorUrl && authorUrl.startsWith('/')) {
+          authorUrl = 'https://www.zhihu.com' + authorUrl;
+        }
       }
 
       // 6. 提取摘要
@@ -115,18 +122,52 @@ export class ZhihuCollector {
         if (excerpt) excerpt += '...';
       }
 
+      // 7. 提取赞同数和评论数
+      let voteCount = 0;
+      let commentCount = 0;
+
+      // 赞同数
+      const voteBtn = targetEl.querySelector('.VoteButton--up');
+      if (voteBtn) {
+        const text = voteBtn.textContent || '';
+        // 匹配 "赞同 1.2 万" 或 "1.2 万"
+        const match = text.match(/[\d\.]+\s*[\u4e00-\u9fa5]*/); 
+        if (match) {
+          voteCount = this.parseCount(match[0]);
+        }
+      }
+
+      // 评论数
+      const commentBtn = Array.from(targetEl.querySelectorAll('button.ContentItem-action')).find(btn => 
+        (btn.textContent || '').includes('评论')
+      );
+      if (commentBtn) {
+        const text = commentBtn.textContent || '';
+        // "42 条评论" -> 42
+        const match = text.match(/(\d+)\s*条评论/);
+        if (match) {
+          commentCount = parseInt(match[1], 10);
+        } else if (text.includes('评论')) {
+          // 有时候只有 "评论"，默认 0 或解析失败
+          commentCount = 0;
+        }
+      }
+
       const contentItem: ContentItem = {
         id,
         platform: 'zhihu',
         title,
         url: `https://www.zhihu.com/${type === 'answer' ? 'answer' : 'p'}/${id}`,
         author: {
-          name: author
+          name: authorName,
+          url: authorUrl
         },
         contentExcerpt: excerpt,
         metadata: {
           score: 0,
-          category: type
+          category: type,
+          voteCount,
+          commentCount
         },
         actions: [],
         lastUpdated: Date.now(),
@@ -139,5 +180,13 @@ export class ZhihuCollector {
       console.error('[Hachimi] Collector error:', error);
       return null;
     }
+  }
+
+  private parseCount(str: string): number {
+    str = str.replace('赞同', '').trim();
+    if (str.includes('万')) {
+      return parseFloat(str.replace('万', '')) * 10000;
+    }
+    return parseInt(str, 10) || 0;
   }
 }

@@ -27,6 +27,7 @@ export interface UserAction {
 
 export interface Author {
   name: string;
+  url?: string;
   id?: string;
   avatar?: string;
   followers?: number;
@@ -37,6 +38,8 @@ export interface ContentMetadata {
   duration?: number; // video duration
   userReadDuration?: number; // user read/watch duration in seconds (accumulated)
   views?: number;
+  voteCount?: number; // upvotes / likes
+  commentCount?: number;
   publishTime?: number;
   score: number; // calculated signal score
   manualScore?: number; // 10, 12, 14, 16
