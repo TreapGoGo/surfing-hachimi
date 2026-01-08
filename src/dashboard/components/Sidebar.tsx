@@ -1,4 +1,4 @@
-import { BarChart, Search, FileText, Settings, Download, Upload } from 'lucide-react';
+import { BarChart, Search, FileText, Settings, Download, Upload, FlaskConical } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 
 interface SidebarProps {
@@ -12,6 +12,7 @@ export default function Sidebar({ className, activeTab, onTabChange }: SidebarPr
     { id: 'home', icon: BarChart, label: '首页' },
     { id: 'search', icon: Search, label: '搜索' },
     { id: 'archive', icon: FileText, label: '归档' },
+    { id: 'lab', icon: FlaskConical, label: '实验室' },
     { id: 'settings', icon: Settings, label: '设置' },
   ];
 

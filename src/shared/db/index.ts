@@ -33,6 +33,11 @@ export function initDB() {
   return dbPromise;
 }
 
+export async function saveItem(item: ContentItem) {
+  const db = await initDB();
+  return db.put('items', item);
+}
+
 export async function getItem(id: string) {
   const db = await initDB();
   return db.get('items', id);

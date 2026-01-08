@@ -3,6 +3,7 @@ import Waterfall from './components/Waterfall';
 import TimeCapsule from './components/TimeCapsule';
 import DeletePanel from './components/DeletePanel';
 import SettingsPage from './components/SettingsPage';
+import ResonanceLab from './pages/ResonanceLab';
 import { Search, Filter, Loader2, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getAllItems, clearAllItems, deleteItemsBefore } from '@/shared/db';
@@ -16,7 +17,7 @@ export default function App() {
   const [isDisintegrating, setIsDisintegrating] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.replace('#', '');
-    return ['home', 'settings', 'search', 'archive'].includes(hash) ? hash : 'home';
+    return ['home', 'settings', 'search', 'archive', 'lab'].includes(hash) ? hash : 'home';
   });
 
   const loadData = async () => {
@@ -139,6 +140,10 @@ export default function App() {
         ) : activeTab === 'settings' ? (
           <div className="flex-1 w-full">
             <SettingsPage />
+          </div>
+        ) : activeTab === 'lab' ? (
+          <div className="flex-1 w-full">
+            <ResonanceLab />
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-slate-400">
