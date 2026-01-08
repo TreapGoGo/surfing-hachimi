@@ -1,4 +1,4 @@
-type LogLevel = 'info' | 'warn' | 'error' | 'success';
+type LogLevel = 'info' | 'warn' | 'error' | 'success' | 'debug';
 
 export interface LogEntry {
   id: string;
@@ -15,6 +15,10 @@ export class Logger {
   private logs: LogEntry[] = [];
   private listeners: Set<LogListener> = new Set();
   private maxLogs = 100;
+
+  debug(message: string, data?: any) {
+    this.addLog('debug', message, data);
+  }
 
   success(message: string, data?: any) {
     // 自动提取 data 中的摘要信息以供显示
@@ -47,7 +51,14 @@ export class Logger {
       excerpt // 显式记录摘要
     };
     this.logs = [...this.logs, entry].slice(-this.maxLogs);
-    console.log(`[Hachimi ${level}] ${message}`, data || '');
+    
+    // debug 级别默认不在 console 中打印太多干扰，或者可以使用 console.debug
+    if (level === 'debug') {
+      console.debug(`[Hachimi ${level}] ${message}`, data || '');
+    } else {
+      console.log(`[Hachimi ${level}] ${message}`, data || '');
+    }
+
     this.notify();
     
     // 广播日志。在浏览器环境下使用 CustomEvent，在 Service Worker 环境下仅 console.log

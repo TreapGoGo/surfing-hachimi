@@ -3,33 +3,38 @@ import { cn } from '@/shared/utils/cn';
 
 interface SidebarProps {
   className?: string;
+  activeTab: string;
+  onTabChange: (tab: string) => void;
 }
 
-export default function Sidebar({ className }: SidebarProps) {
+export default function Sidebar({ className, activeTab, onTabChange }: SidebarProps) {
   const menuItems = [
-    { icon: BarChart, label: '首页', active: true },
-    { icon: Search, label: '搜索' },
-    { icon: FileText, label: '归档' },
-    { icon: Settings, label: '设置' },
+    { id: 'home', icon: BarChart, label: '首页' },
+    { id: 'search', icon: Search, label: '搜索' },
+    { id: 'archive', icon: FileText, label: '归档' },
+    { id: 'settings', icon: Settings, label: '设置' },
   ];
 
   const bottomItems = [
-    { icon: Upload, label: '导入' },
-    { icon: Download, label: '导出' },
+    { id: 'import', icon: Upload, label: '导入' },
+    { id: 'export', icon: Download, label: '导出' },
   ];
 
   return (
     <div className={cn("w-[60px] flex flex-col items-center py-6 bg-white border-r border-slate-200 h-screen fixed left-0 top-0 z-10", className)}>
-      <div className="text-2xl mb-8 select-none">🏄</div>
+      <div className="mb-8 select-none cursor-pointer hover:scale-110 transition-transform" onClick={() => onTabChange('home')}>
+        <img src="/logo.png" alt="logo" className="w-8 h-8 rounded-lg shadow-sm" />
+      </div>
       
       <div className="flex-1 flex flex-col gap-6">
         {menuItems.map((item) => (
           <button 
-            key={item.label}
+            key={item.id}
             type="button"
+            onClick={() => onTabChange(item.id)}
             className={cn(
               "p-2 rounded-xl transition-colors",
-              item.active ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+              activeTab === item.id ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
             )}
             title={item.label}
           >

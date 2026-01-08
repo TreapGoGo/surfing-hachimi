@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --hachimi-base-font-size: 16px;
+    font-size: var(--hachimi-base-font-size);
+  }
   body {
     @apply antialiased text-slate-900 bg-slate-50;
   }

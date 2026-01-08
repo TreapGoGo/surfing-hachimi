@@ -93,6 +93,7 @@ export async function mergeAndSaveItem(newItem: Partial<ContentItem> & { id: str
       ...(newItem.cover ? { cover: newItem.cover } : {}),
       ...(newItem.author ? { author: { ...existingItem.author, ...newItem.author } } : {}),
       ...(newItem.contentExcerpt && newItem.contentExcerpt !== 'no excerpt' ? { contentExcerpt: newItem.contentExcerpt } : {}),
+      ...(newItem.fullContent ? { fullContent: newItem.fullContent } : {}),
       
       metadata: {
         ...existingItem.metadata,
@@ -100,7 +101,12 @@ export async function mergeAndSaveItem(newItem: Partial<ContentItem> & { id: str
         // 特殊处理：阅读时长累加
         userReadDuration: (existingItem.metadata.userReadDuration || 0) + (newItem.metadata?.userReadDuration || 0),
         // 特殊处理：手动分值覆盖
-        manualScore: newItem.metadata?.manualScore ?? existingItem.metadata.manualScore
+        manualScore: newItem.metadata?.manualScore ?? existingItem.metadata.manualScore,
+        // 特殊处理：胶囊统计数据保留（优先使用 existing，除非 newItem 显式更新）
+        lastShownAt: newItem.metadata?.lastShownAt ?? existingItem.metadata.lastShownAt,
+        capsuleShowCount: newItem.metadata?.capsuleShowCount ?? existingItem.metadata.capsuleShowCount,
+        capsuleHoverCount: newItem.metadata?.capsuleHoverCount ?? existingItem.metadata.capsuleHoverCount,
+        capsuleClickCount: newItem.metadata?.capsuleClickCount ?? existingItem.metadata.capsuleClickCount
       },
       
       // 行为累加
@@ -139,4 +145,80 @@ export async function mergeAndSaveItem(newItem: Partial<ContentItem> & { id: str
 export async function deleteItem(id: string) {
   const db = await initDB();
   return db.delete('items', id);
+}
+
+/**
+ * 分层采样获取共鸣候选集
+ * High Pool: score >= 7 (随机取50个)
+ * Normal Pool: score < 7 (随机取50个)
+ */
+export async function getResonanceCandidates(): Promise<ContentItem[]> {
+  const db = await initDB();
+  const tx = db.transaction('items', 'readonly');
+  const index = tx.store.index('by-score');
+  
+  // 1. 获取两个池子的所有 Keys
+  // IDBKeyRange.lowerBound(7) -> [7, Infinity]
+  const highKeys = await index.getAllKeys(IDBKeyRange.lowerBound(7));
+  // IDBKeyRange.upperBound(7, true) -> (-Infinity, 7)
+  const normalKeys = await index.getAllKeys(IDBKeyRange.upperBound(7, true));
+  
+  // 2. 随机采样 Keys
+  const sampleSize = 50;
+  
+  const sampleKeys = (keys: IDBValidKey[], count: number) => {
+    if (keys.length <= count) return keys;
+    // Fisher-Yates shuffle partial
+    const result: IDBValidKey[] = [];
+    const len = keys.length;
+    const taken = new Set<number>();
+    
+    while (result.length < count) {
+      const idx = Math.floor(Math.random() * len);
+      if (!taken.has(idx)) {
+        taken.add(idx);
+        result.push(keys[idx]);
+      }
+    }
+    return result;
+  };
+
+  const selectedHighKeys = sampleKeys(highKeys, sampleSize);
+  const selectedNormalKeys = sampleKeys(normalKeys, sampleSize);
+  
+  // 3. 批量获取完整对象
+  const allSelectedKeys = [...selectedHighKeys, ...selectedNormalKeys];
+  
+  // 并行获取
+  const items = await Promise.all(
+    allSelectedKeys.map(key => db.get('items', key as string))
+  );
+
+  // 过滤掉可能的 undefined
+  return items.filter((i): i is ContentItem => !!i);
+}
+
+/**
+ * 更新条目的统计数据 (轻量更新，不走全量 merge)
+ */
+export async function updateItemStats(id: string, updates: {
+  lastShownAt?: number;
+  capsuleShowCount?: number;
+  capsuleHoverCount?: number;
+  capsuleClickCount?: number;
+}) {
+  const db = await initDB();
+  const tx = db.transaction('items', 'readwrite');
+  const store = tx.objectStore('items');
+  
+  const item = await store.get(id);
+  if (item) {
+    item.metadata = {
+      ...item.metadata,
+      ...updates
+    };
+    await store.put(item);
+  }
+  
+  await tx.done;
 }

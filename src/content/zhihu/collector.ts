@@ -111,45 +111,67 @@ export class ZhihuCollector {
         }
       }
 
-      // 6. 提取摘要
+      // 6. 提取摘要和全文
       let excerpt = '';
+      let fullContent = '';
       // 增加对更多内容容器的支持，尤其是主回答
-      const richContent = targetEl.querySelector('.RichContent-inner, .RichText, .Post-RichTextContainer, .zm-editable-content');
+      const richContent = targetEl.querySelector('.RichContent-inner, .RichText, .Post-RichTextContainer, .zm-editable-content') as HTMLElement;
       if (richContent) {
-        // 过滤掉不可见的元素和按钮文本
+        // 提取全文 (innerText 会保留基本的换行)
+        fullContent = richContent.innerText.replace(/展开阅读全文|收起/g, '').trim();
+        
+        // 提取摘要
         const text = richContent.textContent || '';
         excerpt = text.replace(/展开阅读全文|收起/g, '').trim().slice(0, 100);
-        if (excerpt) excerpt += '...';
+        if (excerpt && text.length > 100) excerpt += '...';
       }
 
       // 7. 提取赞同数和评论数
       let voteCount = 0;
       let commentCount = 0;
 
-      // 赞同数
-      const voteBtn = targetEl.querySelector('.VoteButton--up');
-      if (voteBtn) {
-        const text = voteBtn.textContent || '';
-        // 匹配 "赞同 1.2 万" 或 "1.2 万"
-        const match = text.match(/[\d\.]+\s*[\u4e00-\u9fa5]*/); 
-        if (match) {
-          voteCount = this.parseCount(match[0]);
+      // 优先级 A: 从 meta 标签提取 (最准确，适用于详情页)
+      const upvoteMeta = document.querySelector('meta[itemprop="upvoteCount"]');
+      const commentMeta = document.querySelector('meta[itemprop="commentCount"]');
+      
+      // 只有当我们在采集主内容时才使用全局 meta
+      const isMainContent = window.location.href.includes(id);
+      
+      if (isMainContent && upvoteMeta) {
+        voteCount = parseInt(upvoteMeta.getAttribute('content') || '0', 10);
+      }
+      if (isMainContent && commentMeta) {
+        commentCount = parseInt(commentMeta.getAttribute('content') || '0', 10);
+      }
+
+      // 优先级 B: 如果没有 meta 或者不是主内容，从当前元素提取
+      if (voteCount === 0) {
+        // 尝试多个可能的按钮选择器
+        const voteBtn = targetEl.querySelector('.VoteButton--up, button[aria-label*="赞同"], .ContentItem-actions button[aria-label*="赞同"]');
+        if (voteBtn) {
+          const ariaLabel = voteBtn.getAttribute('aria-label');
+          const text = (ariaLabel || voteBtn.textContent || '').trim();
+          
+          // 匹配数字，处理 "1.2 万" 或 "1234" 或 "赞同 123"
+          const match = text.match(/([\d\.]+)\s*(万)?/);
+          if (match) {
+            let count = parseFloat(match[1]);
+            if (match[2] === '万') count *= 10000;
+            voteCount = Math.round(count);
+          }
         }
       }
 
-      // 评论数
-      const commentBtn = Array.from(targetEl.querySelectorAll('button.ContentItem-action')).find(btn => 
-        (btn.textContent || '').includes('评论')
-      );
-      if (commentBtn) {
-        const text = commentBtn.textContent || '';
-        // "42 条评论" -> 42
-        const match = text.match(/(\d+)\s*条评论/);
-        if (match) {
-          commentCount = parseInt(match[1], 10);
-        } else if (text.includes('评论')) {
-          // 有时候只有 "评论"，默认 0 或解析失败
-          commentCount = 0;
+      if (commentCount === 0) {
+        const commentBtn = Array.from(targetEl.querySelectorAll('button.ContentItem-action, .ContentItem-action button, .ContentItem-actions button')).find(btn => 
+          (btn.textContent || btn.getAttribute('aria-label') || '').includes('评论')
+        );
+        if (commentBtn) {
+          const text = (commentBtn.textContent || commentBtn.getAttribute('aria-label') || '').trim();
+          const match = text.match(/(\d+)/); // 提取第一个数字
+          if (match) {
+            commentCount = parseInt(match[1], 10);
+          }
         }
       }
 
@@ -163,6 +185,7 @@ export class ZhihuCollector {
           url: authorUrl
         },
         contentExcerpt: excerpt,
+        fullContent: fullContent,
         metadata: {
           score: 0,
           category: type,

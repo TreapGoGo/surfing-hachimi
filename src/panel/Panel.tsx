@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { getAllItems } from '@/shared/db';
 import type { ContentItem } from '@/shared/types';
 import Card from '@/shared/components/Card';
-import { Search, ExternalLink, Download, Loader2 } from 'lucide-react';
+import { Search, ExternalLink, Download, Loader2, Settings } from 'lucide-react';
+import { getSettings, applySettingsToDOM } from '@/shared/utils/settings';
 
 export default function Panel() {
   const [items, setItems] = useState<ContentItem[]>([]);
@@ -23,6 +24,20 @@ export default function Panel() {
       }
     };
     loadData();
+
+    // 初始化设置
+    getSettings().then(settings => {
+      applySettingsToDOM(settings);
+    });
+
+    // 监听设置更新（在 Chrome 扩展中，storage.onChanged 是更好的跨页面同步方式）
+    const handleStorageChange = (changes: any) => {
+      if (changes.app_settings) {
+        applySettingsToDOM(changes.app_settings.newValue);
+      }
+    };
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange);
   }, []);
 
   const filteredItems = items.filter(item => {
@@ -33,15 +48,27 @@ export default function Panel() {
   });
 
   return (
-    <div className="w-full min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="w-full min-h-screen bg-slate-50 flex flex-col font-sans text-[var(--hachimi-base-font-size)]">
       {/* Header */}
       <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
             🏄 哈基米冲浪助手
           </h1>
-          <div className="text-xs text-slate-500">
-            {loading ? '...' : `记录: ${items.length}`}
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => {
+                const url = chrome.runtime.getURL('dashboard.html#settings');
+                chrome.tabs.create({ url });
+              }}
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              title="设置"
+            >
+              <Settings size={16} />
+            </button>
+            <div className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+              {loading ? '...' : `记录: ${items.length}`}
+            </div>
           </div>
         </div>
         

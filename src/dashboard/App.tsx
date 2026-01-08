@@ -2,9 +2,11 @@ import Sidebar from './components/Sidebar';
 import Waterfall from './components/Waterfall';
 import TimeCapsule from './components/TimeCapsule';
 import DeletePanel from './components/DeletePanel';
+import SettingsPage from './components/SettingsPage';
 import { Search, Filter, Loader2, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getAllItems, clearAllItems, deleteItemsBefore } from '@/shared/db';
+import { getSettings, applySettingsToDOM } from '@/shared/utils/settings';
 import type { ContentItem } from '@/shared/types';
 
 export default function App() {
@@ -12,6 +14,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [showDeletePanel, setShowDeletePanel] = useState(false);
   const [isDisintegrating, setIsDisintegrating] = useState(false);
+  const [activeTab, setActiveTab] = useState(() => {
+    const hash = window.location.hash.replace('#', '');
+    return ['home', 'settings', 'search', 'archive'].includes(hash) ? hash : 'home';
+  });
 
   const loadData = async () => {
     try {
@@ -27,6 +33,18 @@ export default function App() {
 
   useEffect(() => {
     loadData();
+    
+    // 初始化设置
+    getSettings().then(settings => {
+      applySettingsToDOM(settings);
+    });
+
+    // 监听设置更新
+    const handleSettingsUpdate = (e: any) => {
+      applySettingsToDOM(e.detail);
+    };
+    window.addEventListener('hachimi-settings-updated' as any, handleSettingsUpdate);
+    return () => window.removeEventListener('hachimi-settings-updated' as any, handleSettingsUpdate);
   }, []);
 
   const handleClearAll = async () => {
@@ -60,63 +78,73 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">
-      <Sidebar />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       
       <main className="flex-1 ml-[60px] flex">
-        {/* Main Content Area: Waterfall */}
-        <div className="flex-1 p-8 w-full">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8 max-w-5xl mx-auto">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">哈基米冲浪助手</h1>
-              <p className="text-slate-500 text-sm mt-1">
-                {loading ? '正在加载...' : `${items.length} 条真实足迹`}
-              </p>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input 
-                  type="text" 
-                  placeholder="搜索..." 
-                  className="pl-9 pr-4 py-2 rounded-full bg-white border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-64 transition-shadow"
-                />
+        {activeTab === 'home' ? (
+          <>
+            {/* Main Content Area: Waterfall */}
+            <div className="flex-1 p-8 w-full">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-8 max-w-5xl mx-auto">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-800">哈基米冲浪助手</h1>
+                  <p className="text-slate-500 text-sm mt-1">
+                    {loading ? '正在加载...' : `${items.length} 条真实足迹`}
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input 
+                      type="text" 
+                      placeholder="搜索..." 
+                      className="pl-9 pr-4 py-2 rounded-full bg-white border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-64 transition-shadow"
+                    />
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => setShowDeletePanel(true)}
+                    className="p-2 bg-white border border-slate-200 rounded-lg text-rose-500 hover:bg-rose-50 hover:border-rose-100 transition-colors"
+                    title="清空记录"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                  <button type="button" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">
+                    <Filter size={18} />
+                  </button>
+                </div>
               </div>
-              <button 
-                type="button"
-                onClick={() => setShowDeletePanel(true)}
-                className="p-2 bg-white border border-slate-200 rounded-lg text-rose-500 hover:bg-rose-50 hover:border-rose-100 transition-colors"
-                title="清空记录"
-              >
-                <Trash2 size={18} />
-              </button>
-              <button type="button" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">
-                <Filter size={18} />
-              </button>
-            </div>
-          </div>
 
-          <div className="max-w-5xl mx-auto">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                <Loader2 className="animate-spin mb-4" size={32} />
-                <p>正在同步您的冲浪足迹...</p>
+              <div className="max-w-5xl mx-auto">
+                {loading ? (
+                  <div className="flex flex-col items-center justify-center py-32 text-slate-400 gap-4">
+                    <Loader2 className="animate-spin" size={32} />
+                    <p className="text-sm font-medium">正在读取本地数据库...</p>
+                  </div>
+                ) : items.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-32 text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl">
+                    <p className="text-sm">暂无记录，快去知乎或B站逛逛吧 🏄</p>
+                  </div>
+                ) : (
+                  <Waterfall items={items} isDisintegrating={isDisintegrating} />
+                )}
               </div>
-            ) : items.length === 0 && !isDisintegrating ? (
-              <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200">
-                <p className="text-slate-400">暂无真实记录，快去知乎或 B 站转转吧！</p>
-              </div>
-            ) : (
-              <Waterfall items={items} isDisintegrating={isDisintegrating} />
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* Right Sidebar: Time Capsule (Optional/Summary) */}
-        <div className="w-[320px] p-6 border-l border-slate-200 hidden xl:block bg-white/50 backdrop-blur-sm sticky top-0 h-screen overflow-y-auto">
-          <TimeCapsule items={items} />
-        </div>
+            {/* Right Sidebar: Timeline */}
+            <TimeCapsule items={items} />
+          </>
+        ) : activeTab === 'settings' ? (
+          <div className="flex-1 w-full">
+            <SettingsPage />
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-slate-400">
+            页面建设中...
+          </div>
+        )}
       </main>
 
       {showDeletePanel && (

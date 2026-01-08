@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
   "name": "哈基米冲浪助手 (Surfing Hachimi)",
-  "version": "0.0.4.2",
+  "version": "0.5.0.0",
   "description": "自动捕获用户在知乎/B站的浏览足迹与互动行为，沉淀为可检索、可导出的个人知识资产。",
+  "icons": {
+    "16": "logo.png",
+    "32": "logo.png",
+    "48": "logo.png",
+    "128": "logo.png"
+  },
   "permissions": [
     "storage",
     "sidePanel",
@@ -17,7 +23,8 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Surfing Hachimi"
+    "default_title": "Surfing Hachimi",
+    "default_icon": "logo.png"
   },
   "side_panel": {
     "default_path": "panel.html"

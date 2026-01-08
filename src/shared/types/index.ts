@@ -17,7 +17,8 @@ export type ActionType =
   | 'open_comment'
   | 'danmaku' 
   | 'triple' 
-  | 'manual_score';
+  | 'manual_score'
+  | 'copy'; // 复制内容
 
 export interface UserAction {
   type: ActionType;
@@ -45,6 +46,12 @@ export interface ContentMetadata {
   manualScore?: number; // 10, 12, 14, 16
   tags?: string[];
   category?: string;
+  
+  // Time Capsule Stats
+  lastShownAt?: number; // 上次在胶囊露脸时间
+  capsuleShowCount?: number; // 胶囊露脸总次数
+  capsuleHoverCount?: number; // 胶囊内悬浮次数
+  capsuleClickCount?: number; // 胶囊内点击/复制次数
 }
 
 export interface ContentItem {
@@ -55,8 +62,14 @@ export interface ContentItem {
   cover?: string; // Bilibili cover
   author: Author;
   contentExcerpt: string; // Text excerpt
+  fullContent?: string;   // Full plain text content
   metadata: ContentMetadata;
   actions: UserAction[];
   lastUpdated: number;
   firstSeen: number;
+}
+
+export interface AppSettings {
+  fontSize: 'small' | 'medium' | 'large';
+  theme?: 'light' | 'dark' | 'auto';
 }

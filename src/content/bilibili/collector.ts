@@ -23,11 +23,27 @@ export class BilibiliCollector {
       
       const desc = document.querySelector('meta[name="description"]')?.getAttribute('content') || '';
 
-      // Views (try to find element)
+      // Views & Likes (try to find elements)
       let views = 0;
-      const viewEl = document.querySelector('.view-text') || document.querySelector('.view');
+      let voteCount = 0;
+      
+      const viewEl = document.querySelector('.view-text') || document.querySelector('.view-count') || document.querySelector('.video-info-detail-list-item:first-child');
       if (viewEl && viewEl.textContent) {
-        views = parseInt(viewEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        const viewText = viewEl.textContent.replace(/[^0-9万\.]/g, '');
+        views = this.parseCount(viewText);
+      }
+
+      const likeEl = document.querySelector('.video-like-info') || document.querySelector('.like-text') || document.querySelector('.video-toolbar-left-item.like .info-text');
+      if (likeEl && likeEl.textContent) {
+        const likeText = likeEl.textContent.replace(/[^0-9万\.]/g, '');
+        voteCount = this.parseCount(likeText);
+      }
+
+      let commentCount = 0;
+      const commentEl = document.querySelector('.reply-navigation .nav-bar .nav-title-text') || document.querySelector('.total-reply');
+      if (commentEl && commentEl.textContent) {
+        const commentText = commentEl.textContent.replace(/[^0-9]/g, '');
+        commentCount = parseInt(commentText, 10) || 0;
       }
 
       return {
@@ -44,6 +60,8 @@ export class BilibiliCollector {
         metadata: {
           score: 0,
           views,
+          voteCount,
+          commentCount
         },
         actions: [],
         lastUpdated: Date.now(),
@@ -52,5 +70,13 @@ export class BilibiliCollector {
     } catch (e) {
       return null;
     }
+  }
+
+  private parseCount(str: string): number {
+    if (!str) return 0;
+    if (str.includes('万')) {
+      return Math.round(parseFloat(str.replace('万', '')) * 10000);
+    }
+    return parseInt(str.replace(/[^0-9]/g, ''), 10) || 0;
   }
 }
