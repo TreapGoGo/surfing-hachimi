@@ -56,11 +56,23 @@ export default function Panel() {
             <img src={chrome.runtime.getURL('logo.png')} alt="logo" className="w-6 h-6 rounded-md" />
             哈基米冲浪助手
           </h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => {
+                const url = chrome.runtime.getURL('dashboard.html');
+                chrome.tabs.create({ url });
+                window.close();
+              }}
+              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="打开主页"
+            >
+              <ExternalLink size={16} />
+            </button>
             <button 
               onClick={() => {
                 const url = chrome.runtime.getURL('dashboard.html#settings');
                 chrome.tabs.create({ url });
+                window.close();
               }}
               className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               title="设置"
