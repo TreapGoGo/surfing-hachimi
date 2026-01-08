@@ -5,12 +5,22 @@ import DeletePanel from './components/DeletePanel';
 import SettingsPage from './components/SettingsPage';
 import ResonanceLab from './pages/ResonanceLab';
 import Toast, { ToastType } from '@/shared/components/Toast';
-import { Search, Filter, Loader2, Trash2, ListChecks, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Search, Filter, Loader2, Trash2, ListChecks, X, ChevronDown } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
 import { getAllItems, clearAllItems, deleteItemsBefore, deleteMultipleItems } from '@/shared/db';
 import { getSettings, applySettingsToDOM } from '@/shared/utils/settings';
 import { formatContentForCopy } from '@/shared/utils/format';
 import type { ContentItem } from '@/shared/types';
+
+const FILTER_OPTIONS = [
+  { label: '最近1小时', value: '1h', ms: 1 * 60 * 60 * 1000 },
+  { label: '最近4小时', value: '4h', ms: 4 * 60 * 60 * 1000 },
+  { label: '最近12小时', value: '12h', ms: 12 * 60 * 60 * 1000 },
+  { label: '最近1天', value: '1d', ms: 24 * 60 * 60 * 1000 },
+  { label: '最近1周', value: '1w', ms: 7 * 24 * 60 * 60 * 1000 },
+  { label: '最近1月', value: '1m', ms: 30 * 24 * 60 * 60 * 1000 },
+  { label: '全部内容', value: 'all', ms: Infinity },
+];
 
 export default function App() {
   const [items, setItems] = useState<ContentItem[]>([]);
@@ -19,6 +29,9 @@ export default function App() {
   const [isDisintegrating, setIsDisintegrating] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [timeFilter, setTimeFilter] = useState(FILTER_OPTIONS[1]); // Default to 4h
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
     message: '',
@@ -62,13 +75,29 @@ export default function App() {
     };
     window.addEventListener('hachimi-toast' as any, handleToastEvent);
 
+    // 监听外部点击以关闭筛选器
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+
     return () => {
       window.removeEventListener('hachimi-settings-updated' as any, handleSettingsUpdate);
       window.removeEventListener('hachimi-toast' as any, handleToastEvent);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
 
-  const handleClearAll = async () => {
+  const filteredItems = items.filter(item => {
+    if (timeFilter.value === 'all') return true;
+    const now = Date.now();
+    const itemTime = item.lastUpdated || 0;
+    return (now - itemTime) <= timeFilter.ms;
+  });
+
+  const loadData = async () => {
     try {
       setIsDisintegrating(true);
       // Wait for animation to play out (1.5s total duration, we wait 1.2s to start clearing)
@@ -176,11 +205,57 @@ export default function App() {
                 <div>
                   <h1 className="text-2xl font-bold text-slate-800">哈基米冲浪助手</h1>
                   <p className="text-slate-500 text-sm mt-1">
-                    {loading ? '正在加载...' : `${items.length} 条真实足迹`}
+                    {loading ? '正在加载...' : `${filteredItems.length} 条内容`}
+                    {timeFilter.value !== 'all' && items.length > filteredItems.length && (
+                      <span className="ml-2 text-slate-400 font-normal">
+                        (从 {items.length} 条中筛选)
+                      </span>
+                    )}
                   </p>
                 </div>
                 
                 <div className="flex items-center gap-3">
+                  {/* Time Filter Dropdown */}
+                  {!isSelectMode && (
+                    <div className="relative" ref={filterRef}>
+                      <button 
+                        onClick={() => setIsFilterOpen(!isFilterOpen)}
+                        className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+                      >
+                        <Filter size={16} className={cn(timeFilter.value !== 'all' ? "text-blue-500" : "text-slate-400")} />
+                        <span className="text-sm font-medium">{timeFilter.label}</span>
+                        <ChevronDown size={14} className={cn("transition-transform duration-200", isFilterOpen ? "rotate-180" : "")} />
+                      </button>
+
+                      {isFilterOpen && (
+                        <div className="absolute top-full mt-2 left-0 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                          <div className="py-1">
+                            {FILTER_OPTIONS.map((option) => (
+                              <button
+                                key={option.value}
+                                onClick={() => {
+                                  setTimeFilter(option);
+                                  setIsFilterOpen(false);
+                                }}
+                                className={cn(
+                                  "w-full px-4 py-2 text-left text-sm transition-colors flex items-center justify-between",
+                                  timeFilter.value === option.value 
+                                    ? "bg-blue-50 text-blue-600 font-medium" 
+                                    : "text-slate-600 hover:bg-slate-50"
+                                )}
+                              >
+                                {option.label}
+                                {timeFilter.value === option.value && (
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {isSelectMode ? (
                     <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-right-4">
                       <span className="text-sm font-medium text-blue-600 mr-2">已选中 {selectedIds.length} 项</span>
@@ -231,9 +306,6 @@ export default function App() {
                   >
                     <Trash2 size={18} />
                   </button>
-                  <button type="button" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">
-                    <Filter size={18} />
-                  </button>
                 </div>
               </div>
 
@@ -243,13 +315,25 @@ export default function App() {
                     <Loader2 className="animate-spin" size={32} />
                     <p className="text-sm font-medium">正在读取本地数据库...</p>
                   </div>
-                ) : items.length === 0 ? (
+                ) : filteredItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-32 text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl">
-                    <p className="text-sm">暂无记录，快去知乎或B站逛逛吧 🏄</p>
+                    <p className="text-sm">
+                      {timeFilter.value === 'all' 
+                        ? '暂无记录，快去知乎或B站逛逛吧 🏄' 
+                        : `该时间段 (${timeFilter.label}) 内暂无记录`}
+                    </p>
+                    {timeFilter.value !== 'all' && (
+                      <button 
+                        onClick={() => setTimeFilter(FILTER_OPTIONS.find(o => o.value === 'all')!)}
+                        className="mt-4 text-blue-500 hover:text-blue-600 text-sm font-medium"
+                      >
+                        查看全部内容
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <Waterfall 
-                    items={items} 
+                    items={filteredItems} 
                     isSelectMode={isSelectMode}
                     selectedIds={selectedIds}
                     onToggleSelect={handleToggleSelect}
