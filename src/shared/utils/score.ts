@@ -58,7 +58,8 @@ export function calculateScore(item: ContentItem): number {
     score += item.metadata.manualScore;
   }
 
-  return score;
+  // 最终得分限制在 20 分以内
+  return Math.min(score, 20);
 }
 
 export function getLevel(score: number): 1 | 2 | 3 | 4 {

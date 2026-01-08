@@ -28,7 +28,7 @@ export default function Card({ item, className, isSelectMode, isSelected, onSele
     4: 'text-yellow-500',
   }[level];
 
-  const formattedTime = formatDistanceToNow(item.lastUpdated || Date.now(), { addSuffix: true, locale: zhCN });
+  const formattedTime = formatDistanceToNow(item.lastUpdated || Date.now(), { addSuffix: true, locale: zhCN }).replace('大约 ', '');
 
   const handleClick = (e: React.MouseEvent) => {
     if (isSelectMode) {
@@ -219,7 +219,7 @@ export function getActionElements(item: ContentItem) {
       11: '必看'
     };
     const label = scoreMap[item.metadata.manualScore] || `${item.metadata.manualScore}分`;
-    elements.push(getCapsule("manual", `标记为${label}`, "bg-orange-500 font-bold"));
+    elements.push(getCapsule("manual", `评价为${label}`, "bg-orange-500 font-bold"));
   }
 
   // 2. Read duration (蓝色)

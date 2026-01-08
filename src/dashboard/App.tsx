@@ -6,7 +6,33 @@ import SettingsPage from './components/SettingsPage';
 import ResonanceLab from './pages/ResonanceLab';
 import Toast from '@/shared/components/Toast';
 import type { ToastType } from '@/shared/components/Toast';
-import { Search, Filter, Loader2, Trash2, ListChecks, X, ChevronDown } from 'lucide-react';
+import { cn } from '@/shared/utils/cn';
+import { Search, Filter, Loader2, Trash2, ListChecks, X, ChevronDown, Clock, ChevronRight, Check, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+
+const INTERACTION_OPTIONS = [
+  // 评分标签 (现更名为评价)
+  { label: '评价为必看', value: 'score_11', category: '评价' },
+  { label: '评价为很棒', value: 'score_9', category: '评价' },
+  { label: '评价为不错', value: 'score_7', category: '评价' },
+  { label: '评价为还行', value: 'score_5', category: '评价' },
+  // 阅读标签
+  { label: '读了很久', value: 'read_30s', category: '阅读' },
+  { label: '已阅', value: 'read_seen', category: '阅读' },
+  // 交互标签
+  { label: '赞过', value: 'upvote', category: '交互' },
+  { label: '已喜欢', value: 'like', category: '交互' },
+  { label: '已收藏', value: 'favorite', category: '交互' },
+  { label: '已分享', value: 'share', category: '交互' },
+  { label: '已评论', value: 'comment', category: '交互' },
+  { label: '看过评论区', value: 'open_comment', category: '交互' },
+  { label: '发过弹幕', value: 'danmaku', category: '交互' },
+  { label: '一键三连', value: 'triple', category: '交互' },
+];
+
+const PLATFORM_OPTIONS = [
+  { label: '知乎', value: 'zhihu' },
+  { label: 'B站', value: 'bilibili' },
+];
 import { useEffect, useState, useRef } from 'react';
 import { getAllItems, clearAllItems, deleteItemsBefore, deleteMultipleItems } from '@/shared/db';
 import { getSettings, applySettingsToDOM } from '@/shared/utils/settings';
@@ -31,13 +57,27 @@ export default function App() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [timeFilter, setTimeFilter] = useState(FILTER_OPTIONS[1]); // Default to 4h
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
+  const [isTimeFilterOpen, setIsTimeFilterOpen] = useState(false);
+  const timeFilterRef = useRef<HTMLDivElement>(null);
+
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [activeSubMenu, setActiveSubMenu] = useState<'points' | 'evaluation' | 'read' | 'interaction' | 'platform' | null>(null);
+  const [scoreRange, setScoreRange] = useState<[number, number]>([0, 20]);
+  const [selectedInteractions, setSelectedInteractions] = useState<string[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
     message: '',
     type: 'success'
   });
+  
+  // 排序状态
+  const [sortField, setSortField] = useState<'time' | 'score'>('time');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.replace('#', '');
     return ['home', 'settings', 'search', 'archive', 'lab'].includes(hash) ? hash : 'home';
@@ -78,8 +118,15 @@ export default function App() {
 
     // 监听外部点击以关闭筛选器
     const handleClickOutside = (e: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
-        setIsFilterOpen(false);
+      if (timeFilterRef.current && !timeFilterRef.current.contains(e.target as Node)) {
+        setIsTimeFilterOpen(false);
+      }
+      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) {
+        setIsFilterMenuOpen(false);
+        setActiveSubMenu(null);
+      }
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setIsSortMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -92,11 +139,79 @@ export default function App() {
   }, []);
 
   const filteredItems = items.filter(item => {
-    if (timeFilter.value === 'all') return true;
-    const now = Date.now();
-    const itemTime = item.lastUpdated || 0;
-    return (now - itemTime) <= timeFilter.ms;
+    // 1. Time Filter
+    let timeMatch = true;
+    if (timeFilter.value !== 'all') {
+      const now = Date.now();
+      const itemTime = item.lastUpdated || 0;
+      timeMatch = (now - itemTime) <= timeFilter.ms;
+    }
+    if (!timeMatch) return false;
+
+    // 2. Score Range Filter
+    const itemScore = item.metadata?.score || 0;
+    if (itemScore < scoreRange[0] || itemScore > scoreRange[1]) return false;
+
+    // 3. Interaction Filter (Evaluation, Read, Interaction)
+    if (selectedInteractions.length > 0) {
+      const hasMatch = selectedInteractions.some(val => {
+        const actions = new Set(item.actions.map(a => a.type));
+        
+        switch(val) {
+          case 'score_11': return item.metadata?.manualScore === 11;
+          case 'score_9': return item.metadata?.manualScore === 9;
+          case 'score_7': return item.metadata?.manualScore === 7;
+          case 'score_5': return item.metadata?.manualScore === 5;
+          case 'read_30s': return actions.has('read_30s');
+          case 'read_seen': return !actions.has('read_30s') && (item.metadata?.userReadDuration || 0) > 10;
+          case 'upvote': return actions.has('upvote');
+          case 'like': return actions.has('like');
+          case 'favorite': return actions.has('favorite') || actions.has('star');
+          case 'share': return actions.has('share');
+          case 'comment': return actions.has('comment');
+          case 'open_comment': return actions.has('open_comment');
+          case 'danmaku': return actions.has('danmaku');
+          case 'triple': return actions.has('triple');
+          default: return false;
+        }
+      });
+      if (!hasMatch) return false;
+    }
+
+    // 4. Platform Filter
+    if (selectedPlatforms.length > 0) {
+      if (!selectedPlatforms.includes(item.platform)) return false;
+    }
+
+    return true;
   });
+
+  // 5. Sorting Logic
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    let comparison = 0;
+    if (sortField === 'time') {
+      comparison = (a.lastUpdated || 0) - (b.lastUpdated || 0);
+    } else if (sortField === 'score') {
+      comparison = (a.metadata?.score || 0) - (b.metadata?.score || 0);
+    }
+    return sortOrder === 'desc' ? -comparison : comparison;
+  });
+
+  const toggleInteraction = (value: string) => {
+    setSelectedInteractions(prev => 
+      prev.includes(value) 
+        ? prev.filter(v => v !== value) 
+        : [...prev, value]
+    );
+  };
+
+  const togglePlatform = (value: string) => {
+    setSelectedPlatforms(prev => 
+      prev.includes(value) 
+        ? prev.filter(v => v !== value) 
+        : [...prev, value]
+    );
+  };
 
   const handleClearAll = async () => {
     try {
@@ -192,6 +307,14 @@ export default function App() {
     setSelectedIds([]);
   };
 
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === sortedItems.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(sortedItems.map(item => item.id));
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
@@ -216,50 +339,363 @@ export default function App() {
                 </div>
                 
                 <div className="flex items-center gap-3">
-                  {/* Time Filter Dropdown */}
                   {!isSelectMode && (
-                    <div className="relative" ref={filterRef}>
-                      <button 
-                        onClick={() => setIsFilterOpen(!isFilterOpen)}
-                        className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-                      >
-                        <Filter size={16} className={cn(timeFilter.value !== 'all' ? "text-blue-500" : "text-slate-400")} />
-                        <span className="text-sm font-medium">{timeFilter.label}</span>
-                        <ChevronDown size={14} className={cn("transition-transform duration-200", isFilterOpen ? "rotate-180" : "")} />
-                      </button>
+                    <>
+                      {/* 新增复合筛选工具 */}
+                      <div className="relative" ref={filterMenuRef}>
+                        <button 
+                      onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 bg-white border rounded-lg transition-all shadow-sm hover:bg-slate-50",
+                        (isFilterMenuOpen || selectedInteractions.length > 0 || selectedPlatforms.length > 0) ? "border-blue-200 text-blue-600" : "border-slate-200 text-slate-500"
+                      )}
+                    >
+                      <Filter size={16} />
+                      <span className="text-sm font-medium">高级筛选</span>
+                    </button>
 
-                      {isFilterOpen && (
-                        <div className="absolute top-full mt-2 left-0 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                          <div className="py-1">
-                            {FILTER_OPTIONS.map((option) => (
+                    {isFilterMenuOpen && (
+                      <div className="absolute top-full mt-2 left-0 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[60] py-1 animate-in fade-in zoom-in-95 duration-200">
+                        {[
+                          { id: 'points', label: '按分数' },
+                          { id: 'evaluation', label: '按评价', category: '评价' },
+                          { id: 'read', label: '按阅读', category: '阅读' },
+                          { id: 'interaction', label: '按交互', category: '交互' },
+                          { id: 'platform', label: '按平台', category: '平台' },
+                        ].map((menuItem) => (
+                          <div 
+                            key={menuItem.id}
+                            className={cn(
+                              "px-4 py-2 text-sm transition-colors flex items-center justify-between cursor-pointer group relative",
+                              activeSubMenu === menuItem.id ? "bg-slate-50 text-blue-600" : "text-slate-600 hover:bg-slate-50"
+                            )}
+                            onMouseEnter={() => setActiveSubMenu(menuItem.id as any)}
+                          >
+                            <span className="font-medium">{menuItem.label}</span>
+                            <ChevronRight size={14} className={cn(activeSubMenu === menuItem.id ? "text-blue-400" : "text-slate-400")} />
+
+                                {/* 二级菜单 */}
+                                {activeSubMenu === menuItem.id && (
+                                  <div 
+                                    className="absolute left-full top-0 ml-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-[70] py-1 animate-in fade-in slide-in-from-left-2 duration-200 before:absolute before:content-[''] before:-left-2 before:top-0 before:bottom-0 before:w-2"
+                                    onMouseLeave={() => setActiveSubMenu(null)}
+                                  >
+                                    {menuItem.id === 'points' ? (
+                                      <div className="px-4 py-4 space-y-4">
+                                        <style>{`
+                                          .range-slider::-webkit-slider-thumb {
+                                            pointer-events: auto;
+                                            appearance: none;
+                                            width: 16px;
+                                            height: 24px;
+                                            cursor: grab;
+                                          }
+                                          .range-slider::-webkit-slider-thumb:active {
+                                            cursor: grabbing;
+                                          }
+                                          .range-slider::-moz-range-thumb {
+                                            pointer-events: auto;
+                                            width: 16px;
+                                            height: 24px;
+                                            cursor: grab;
+                                            border: none;
+                                            background: transparent;
+                                          }
+                                        `}</style>
+                                        <div className="flex flex-col gap-3">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <div className="flex flex-col gap-1">
+                                              <span className="text-[10px] text-slate-400 font-medium">最小值</span>
+                                              <input 
+                                                type="number" 
+                                                min="0" 
+                                                max="20" 
+                                                value={scoreRange[0]}
+                                                onChange={(e) => {
+                                                  const val = Math.min(20, Math.max(0, parseInt(e.target.value) || 0));
+                                                  setScoreRange([Math.min(val, scoreRange[1]), scoreRange[1]]);
+                                                }}
+                                                className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-blue-600 focus:outline-none focus:border-blue-300"
+                                              />
+                                            </div>
+                                            <div className="flex flex-col gap-1 items-end">
+                                              <span className="text-[10px] text-slate-400 font-medium">最大值</span>
+                                              <input 
+                                                type="number" 
+                                                min="0" 
+                                                max="20" 
+                                                value={scoreRange[1]}
+                                                onChange={(e) => {
+                                                  const val = Math.min(20, Math.max(0, parseInt(e.target.value) || 0));
+                                                  setScoreRange([scoreRange[0], Math.max(val, scoreRange[0])]);
+                                                }}
+                                                className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-blue-600 focus:outline-none focus:border-blue-300 text-right"
+                                              />
+                                            </div>
+                                          </div>
+
+                                          <div className="px-1.5 pt-2 pb-1">
+                                            <div className="relative h-2 bg-slate-100 rounded-sm border border-slate-200 group/track">
+                                              {/* Track highlight */}
+                                              <div 
+                                                className="absolute h-full bg-blue-500/20 pointer-events-none"
+                                                style={{ 
+                                                  left: `${(scoreRange[0] / 20) * 100}%`, 
+                                                  right: `${100 - (scoreRange[1] / 20) * 100}%` 
+                                                }}
+                                              />
+                                              
+                                              {/* Real Inputs (Invisible, only thumbs are clickable) */}
+                                              <input 
+                                                type="range" 
+                                                min="0" 
+                                                max="20" 
+                                                value={scoreRange[0]} 
+                                                onChange={(e) => {
+                                                  const val = parseInt(e.target.value);
+                                                  setScoreRange([Math.min(val, scoreRange[1]), scoreRange[1]]);
+                                                }}
+                                                className="range-slider absolute inset-y-0 -left-1.5 -right-1.5 w-[calc(100%+12px)] appearance-none bg-transparent pointer-events-none z-30"
+                                              />
+                                              <input 
+                                                type="range" 
+                                                min="0" 
+                                                max="20" 
+                                                value={scoreRange[1]} 
+                                                onChange={(e) => {
+                                                  const val = parseInt(e.target.value);
+                                                  setScoreRange([scoreRange[0], Math.max(val, scoreRange[0])]);
+                                                }}
+                                                className="range-slider absolute inset-y-0 -left-1.5 -right-1.5 w-[calc(100%+12px)] appearance-none bg-transparent pointer-events-none z-20"
+                                                style={{ 
+                                                  zIndex: scoreRange[1] === scoreRange[0] && scoreRange[1] < 10 ? 31 : 20 
+                                                }}
+                                              />
+
+                                              {/* Visual Thumbs */}
+                                              <div 
+                                                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-5 bg-white border-2 border-blue-500 rounded-sm shadow-md flex items-center justify-center pointer-events-none z-40"
+                                                style={{ left: `${(scoreRange[0] / 20) * 100}%` }}
+                                              >
+                                                <div className="w-0.5 h-2 bg-blue-100 rounded-full" />
+                                              </div>
+                                              <div 
+                                                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-5 bg-white border-2 border-blue-500 rounded-sm shadow-md flex items-center justify-center pointer-events-none z-40"
+                                                style={{ left: `${(scoreRange[1] / 20) * 100}%` }}
+                                              >
+                                                <div className="w-0.5 h-2 bg-blue-100 rounded-full" />
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <div className="pt-2 border-t border-slate-100">
+                                            <button 
+                                              onClick={() => setScoreRange([0, 20])}
+                                              className="w-full py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-1.5"
+                                            >
+                                              <RotateCcw size={12} />
+                                              恢复默认
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ) : menuItem.id === 'platform' ? (
+                                      PLATFORM_OPTIONS.map(opt => (
+                                        <div 
+                                          key={opt.value}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            togglePlatform(opt.value);
+                                          }}
+                                          className="px-4 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer"
+                                        >
+                                          <span>{opt.label}</span>
+                                          <div className={cn(
+                                            "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                                            selectedPlatforms.includes(opt.value) ? "bg-blue-500 border-blue-500" : "border-slate-300"
+                                          )}>
+                                            {selectedPlatforms.includes(opt.value) && <Check size={12} className="text-white" />}
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      INTERACTION_OPTIONS.filter(opt => opt.category === menuItem.category).map(opt => (
+                                        <div 
+                                          key={opt.value}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleInteraction(opt.value);
+                                          }}
+                                          className="px-4 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer"
+                                        >
+                                          <span>{opt.label}</span>
+                                          <div className={cn(
+                                            "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                                            selectedInteractions.includes(opt.value) ? "bg-blue-500 border-blue-500" : "border-slate-300"
+                                          )}>
+                                            {selectedInteractions.includes(opt.value) && <Check size={12} className="text-white" />}
+                                          </div>
+                                        </div>
+                                      ))
+                                    )}
+                                    
+                                    {/* 重置按钮 (针对交互类) */}
+                                    {menuItem.id !== 'platform' && menuItem.id !== 'points' && selectedInteractions.some(val => 
+                                      INTERACTION_OPTIONS.find(opt => opt.value === val)?.category === menuItem.category
+                                    ) && (
+                                      <div className="border-t border-slate-100 mt-1 pt-1">
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const categoryValues = INTERACTION_OPTIONS
+                                              .filter(opt => opt.category === menuItem.category)
+                                              .map(opt => opt.value);
+                                            setSelectedInteractions(prev => prev.filter(v => !categoryValues.includes(v)));
+                                          }}
+                                          className="w-full px-4 py-2 text-left text-xs text-blue-500 hover:bg-blue-50 font-medium"
+                                        >
+                                          重置当前分类
+                                        </button>
+                                      </div>
+                                    )}
+                                    {/* 重置按钮 (针对平台) */}
+                                    {menuItem.id === 'platform' && selectedPlatforms.length > 0 && (
+                                      <div className="border-t border-slate-100 mt-1 pt-1">
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedPlatforms([]);
+                                          }}
+                                          className="w-full px-4 py-2 text-left text-xs text-blue-500 hover:bg-blue-50 font-medium"
+                                        >
+                                          重置平台筛选
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                      </div>
+
+                      {/* 时间筛选工具 */}
+                      <div className="relative" ref={timeFilterRef}>
+                        <button 
+                          onClick={() => setIsTimeFilterOpen(!isTimeFilterOpen)}
+                          className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+                        >
+                          <Clock size={16} className={cn(timeFilter.value !== 'all' ? "text-blue-500" : "text-slate-400")} />
+                          <span className="text-sm font-medium">{timeFilter.label}</span>
+                          <ChevronDown size={14} className={cn("transition-transform duration-200", isTimeFilterOpen ? "rotate-180" : "")} />
+                        </button>
+
+                        {isTimeFilterOpen && (
+                          <div className="absolute top-full mt-2 left-0 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                            <div className="py-1">
+                              {FILTER_OPTIONS.map(option => (
+                                <button
+                                  key={option.value}
+                                  onClick={() => {
+                                    setTimeFilter(option);
+                                    setIsTimeFilterOpen(false);
+                                  }}
+                                  className={cn(
+                                    "w-full px-4 py-2 text-left text-sm transition-colors flex items-center justify-between",
+                                    timeFilter.value === option.value 
+                                      ? "bg-blue-50 text-blue-600 font-medium" 
+                                      : "text-slate-600 hover:bg-slate-50"
+                                  )}
+                                >
+                                  {option.label}
+                                  {timeFilter.value === option.value && (
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                    )}
+
+                    {!isSelectMode && (
+                      /* 排序规则工具 */
+                      <div className="relative" ref={sortMenuRef}>
+                        <button 
+                          onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 bg-white border rounded-lg transition-all shadow-sm hover:bg-slate-50",
+                            isSortMenuOpen ? "border-blue-200 text-blue-600" : "border-slate-200 text-slate-500"
+                          )}
+                        >
+                          <ArrowUpDown size={16} />
+                          <span className="text-sm font-medium">排序规则</span>
+                        </button>
+
+                        {isSortMenuOpen && (
+                          <div className="absolute top-full mt-2 right-0 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[60] py-1 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="px-2 py-1.5 border-b border-slate-100 mb-1">
+                              <div className="flex bg-slate-100 p-1 rounded-lg">
+                                <button 
+                                  onClick={() => setSortOrder('desc')}
+                                  className={cn(
+                                    "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-bold transition-all",
+                                    sortOrder === 'desc' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                                  )}
+                                >
+                                  <ArrowDown size={14} />
+                                  降序
+                                </button>
+                                <button 
+                                  onClick={() => setSortOrder('asc')}
+                                  className={cn(
+                                    "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-bold transition-all",
+                                    sortOrder === 'asc' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                                  )}
+                                >
+                                  <ArrowUp size={14} />
+                                  升序
+                                </button>
+                              </div>
+                            </div>
+                            {[
+                              { id: 'time', label: '按浏览时间' },
+                              { id: 'score', label: '按分数' },
+                            ].map((option) => (
                               <button
-                                key={option.value}
+                                key={option.id}
                                 onClick={() => {
-                                  setTimeFilter(option);
-                                  setIsFilterOpen(false);
+                                  setSortField(option.id as any);
+                                  setIsSortMenuOpen(false);
                                 }}
                                 className={cn(
                                   "w-full px-4 py-2 text-left text-sm transition-colors flex items-center justify-between",
-                                  timeFilter.value === option.value 
-                                    ? "bg-blue-50 text-blue-600 font-medium" 
-                                    : "text-slate-600 hover:bg-slate-50"
+                                  sortField === option.id 
+                                    ? "bg-blue-50 text-blue-600 font-bold" 
+                                    : "text-slate-600 hover:bg-slate-50 font-medium"
                                 )}
                               >
                                 {option.label}
-                                {timeFilter.value === option.value && (
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                )}
+                                {sortField === option.id && <Check size={14} />}
                               </button>
                             ))}
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    )}
 
-                  {isSelectMode ? (
+                      {isSelectMode ? (
                     <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-right-4">
                       <span className="text-sm font-medium text-blue-600 mr-2">已选中 {selectedIds.length} 项</span>
+                      <button 
+                        onClick={handleToggleSelectAll}
+                        className="px-3 py-1 bg-white border border-blue-200 text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-50 transition-colors shadow-sm"
+                      >
+                        {selectedIds.length === sortedItems.length ? '全不选' : '全选'}
+                      </button>
                       <button 
                         onClick={handleBatchCopy}
                         disabled={selectedIds.length === 0}
@@ -284,10 +720,11 @@ export default function App() {
                   ) : (
                     <button 
                       onClick={() => setIsSelectMode(true)}
-                      className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-100 transition-all shadow-sm group"
+                      className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-100 transition-all shadow-sm group"
                       title="开启多选模式"
                     >
-                      <ListChecks size={18} className="group-active:scale-90 transition-transform" />
+                      <ListChecks size={16} className="group-active:scale-90 transition-transform" />
+                      <span className="text-sm font-medium">批量操作</span>
                     </button>
                   )}
 
@@ -316,7 +753,7 @@ export default function App() {
                     <Loader2 className="animate-spin" size={32} />
                     <p className="text-sm font-medium">正在读取本地数据库...</p>
                   </div>
-                ) : filteredItems.length === 0 ? (
+                ) : sortedItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-32 text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl">
                     <p className="text-sm">
                       {timeFilter.value === 'all' 
@@ -334,7 +771,7 @@ export default function App() {
                   </div>
                 ) : (
                   <Waterfall 
-                    items={filteredItems} 
+                    items={sortedItems} 
                     isSelectMode={isSelectMode}
                     selectedIds={selectedIds}
                     onToggleSelect={handleToggleSelect}
