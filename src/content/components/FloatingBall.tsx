@@ -85,7 +85,12 @@ export default function FloatingBall() {
           src={isContextValid() ? chrome.runtime.getURL('logo.png') : ''} 
           alt="Hachimi" 
           className="w-10 h-10 object-contain opacity-90"
-          style={{ filter: !isContextValid() ? 'grayscale(100%)' : 'none' }}
+          style={{ 
+            filter: !isContextValid() ? 'grayscale(100%)' : 'none',
+            // 关键修复：内联设置宽高，防止 CSS 加载前的闪现
+            width: '40px',
+            height: '40px'
+          }}
         />
       </button>
       

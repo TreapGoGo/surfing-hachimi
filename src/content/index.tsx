@@ -67,6 +67,13 @@ if ((window as any).__HACHIMI_INITIALIZED__) {
     const styleLink = document.createElement('link');
     styleLink.rel = 'stylesheet';
     styleLink.href = chrome.runtime.getURL('assets/style.css');
+    
+    // 优化：等待样式加载完成后再显示根节点，彻底解决闪现问题
+    root.style.opacity = '0';
+    styleLink.onload = () => {
+      root.style.opacity = '1';
+    };
+    
     shadow.appendChild(styleLink);
 
     createRoot(root).render(

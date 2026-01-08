@@ -374,19 +374,16 @@ export default function App() {
             <div className="flex-1 p-8 w-full">
               {/* Header */}
               <div className="flex items-center justify-between mb-8 max-w-5xl mx-auto">
-                <div className="flex items-center gap-3">
-                  <img src={chrome.runtime.getURL('logo.png')} alt="logo" className="w-10 h-10 rounded-xl shadow-sm" />
-                  <div>
-                    <h1 className="text-2xl font-bold text-slate-800">哈基米冲浪助手</h1>
-                    <p className="text-slate-500 text-sm mt-1">
-                      {loading ? '正在加载...' : `${filteredItems.length} 条内容`}
-                      {timeFilter.value !== 'all' && items.length > filteredItems.length && (
-                        <span className="ml-2 text-slate-400 font-normal">
-                          (从 {items.length} 条中筛选)
-                        </span>
-                      )}
-                    </p>
-                  </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-800">哈基米冲浪助手</h1>
+                  <p className="text-slate-500 text-sm mt-1">
+                    {loading ? '正在加载...' : `${filteredItems.length} 条内容`}
+                    {timeFilter.value !== 'all' && items.length > filteredItems.length && (
+                      <span className="ml-2 text-slate-400 font-normal">
+                        (从 {items.length} 条中筛选)
+                      </span>
+                    )}
+                  </p>
                 </div>
                 
                 <div className="flex items-center gap-3">
