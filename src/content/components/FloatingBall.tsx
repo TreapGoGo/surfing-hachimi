@@ -78,13 +78,13 @@ export default function FloatingBall() {
       <button 
         type="button"
         onClick={handleButtonClick}
-        className="w-12 h-12 bg-white text-blue-600 rounded-full shadow-lg flex items-center justify-center hover:bg-slate-50 transition-all hover:scale-110 active:scale-95 border-2 border-blue-500/10"
+        className="w-12 h-12 bg-white text-blue-600 rounded-xl shadow-lg flex items-center justify-center hover:bg-slate-50 transition-all hover:scale-110 active:scale-95 border-2 border-blue-500/10 overflow-hidden"
         title="哈基米冲浪助手 (点击开关侧边栏)"
       >
         <img 
           src={isContextValid() ? chrome.runtime.getURL('logo.png') : ''} 
           alt="Hachimi" 
-          className="w-8 h-8 object-contain opacity-90"
+          className="w-10 h-10 object-contain opacity-90"
           style={{ filter: !isContextValid() ? 'grayscale(100%)' : 'none' }}
         />
       </button>

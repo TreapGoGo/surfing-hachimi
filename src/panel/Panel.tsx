@@ -53,7 +53,8 @@ export default function Panel() {
       <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            🏄 哈基米冲浪助手
+            <img src={chrome.runtime.getURL('logo.png')} alt="logo" className="w-6 h-6 rounded-md" />
+            哈基米冲浪助手
           </h1>
           <div className="flex items-center gap-2">
             <button 

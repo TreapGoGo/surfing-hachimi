@@ -24,7 +24,7 @@ export default function Sidebar({ className, activeTab, onTabChange }: SidebarPr
   return (
     <div className={cn("w-[60px] flex flex-col items-center py-6 bg-white border-r border-slate-200 h-screen fixed left-0 top-0 z-10", className)}>
       <div className="mb-8 select-none cursor-pointer hover:scale-110 transition-transform" onClick={() => onTabChange('home')}>
-        <img src="/logo.png" alt="logo" className="w-8 h-8 rounded-lg shadow-sm" />
+        <img src={chrome.runtime.getURL('logo.png')} alt="logo" className="w-8 h-8 rounded-lg shadow-sm" />
       </div>
       
       <div className="flex-1 flex flex-col gap-6">
