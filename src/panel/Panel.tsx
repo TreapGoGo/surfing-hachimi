@@ -1,10 +1,36 @@
-import { mockItems } from '@/dashboard/mockData';
+import { useEffect, useState } from 'react';
+import { getAllItems } from '@/shared/db';
+import type { ContentItem } from '@/shared/types';
 import Card from '@/shared/components/Card';
-import { Search, ExternalLink, Download } from 'lucide-react';
+import { Search, ExternalLink, Download, Loader2 } from 'lucide-react';
 
 export default function Panel() {
-  // Sort by score desc as per PRD
-  const items = [...mockItems].sort((a, b) => b.metadata.score - a.metadata.score);
+  const [items, setItems] = useState<ContentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const data = await getAllItems();
+        // Sort by score desc as per PRD
+        const sorted = data.sort((a, b) => (b.metadata?.score || 0) - (a.metadata?.score || 0));
+        setItems(sorted);
+      } catch (e) {
+        console.error('Failed to load sidepanel data', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  const filteredItems = items.filter(item => {
+    const query = searchQuery.toLowerCase();
+    const titleMatch = (item.title || '').toLowerCase().includes(query);
+    const authorMatch = (item.author?.name || '').toLowerCase().includes(query);
+    return titleMatch || authorMatch;
+  });
 
   return (
     <div className="w-full min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -14,14 +40,18 @@ export default function Panel() {
           <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
             🏄 哈基米冲浪助手
           </h1>
-          <div className="text-xs text-slate-500">近 24h: {items.length} 条</div>
+          <div className="text-xs text-slate-500">
+            {loading ? '...' : `记录: ${items.length}`}
+          </div>
         </div>
         
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
           <input 
             type="text" 
-            placeholder="搜索..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索足迹..." 
             className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-100 border-none text-xs focus:ring-2 focus:ring-blue-100 transition-shadow outline-none"
           />
         </div>
@@ -29,9 +59,20 @@ export default function Panel() {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {items.map(item => (
-          <Card key={item.id} item={item} className="shadow-sm border-slate-200" />
-        ))}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <Loader2 className="animate-spin mb-2" size={24} />
+            <p className="text-xs">加载中...</p>
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 text-xs">
+            {searchQuery ? '未找到匹配足迹' : '暂无足迹，快去冲浪吧！'}
+          </div>
+        ) : (
+          filteredItems.map(item => (
+            <Card key={item.id} item={item} className="shadow-sm border-slate-200" />
+          ))
+        )}
       </div>
 
       {/* Footer Actions */}

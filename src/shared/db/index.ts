@@ -76,7 +76,7 @@ export async function getRecentItems(limit = 50) {
   return items;
 }
 
-export async function mergeAndSaveItem(newItem: ContentItem) {
+export async function mergeAndSaveItem(newItem: Partial<ContentItem> & { id: string }) {
   const db = await initDB();
   const tx = db.transaction('items', 'readwrite');
   const store = tx.objectStore('items');
@@ -84,39 +84,53 @@ export async function mergeAndSaveItem(newItem: ContentItem) {
   const existingItem = await store.get(newItem.id);
   
   if (existingItem) {
-    // 1. Accumulate read duration
-    const existingDuration = existingItem.metadata.userReadDuration || 0;
-    const newDuration = newItem.metadata.userReadDuration || 0;
-    newItem.metadata.userReadDuration = existingDuration + newDuration;
+    // 构造合并后的对象，以 existingItem 为底色
+    const mergedItem: ContentItem = {
+      ...existingItem,
+      // 只有 newItem 中确实存在的顶级字段才覆盖
+      ...(newItem.title ? { title: newItem.title } : {}),
+      ...(newItem.url ? { url: newItem.url } : {}),
+      ...(newItem.cover ? { cover: newItem.cover } : {}),
+      ...(newItem.author ? { author: { ...existingItem.author, ...newItem.author } } : {}),
+      ...(newItem.contentExcerpt && newItem.contentExcerpt !== 'no excerpt' ? { contentExcerpt: newItem.contentExcerpt } : {}),
+      
+      metadata: {
+        ...existingItem.metadata,
+        ...(newItem.metadata || {}),
+        // 特殊处理：阅读时长累加
+        userReadDuration: (existingItem.metadata.userReadDuration || 0) + (newItem.metadata?.userReadDuration || 0),
+        // 特殊处理：手动分值覆盖
+        manualScore: newItem.metadata?.manualScore ?? existingItem.metadata.manualScore
+      },
+      
+      // 行为累加
+      actions: [
+        ...(existingItem.actions || []),
+        ...(newItem.actions || [])
+      ],
+      
+      lastUpdated: Date.now()
+    };
 
-    // 2. Actions union
-    // We append new actions. Score calculation will handle deduplication of types if needed.
-    const existingActions = existingItem.actions || [];
-    const newActions = newItem.actions || [];
-    newItem.actions = [...existingActions, ...newActions];
+    // 重新计算总分
+    mergedItem.metadata.score = calculateScore(mergedItem);
     
-    // 3. Merge manual score (preserve existing if new is missing, or overwrite?)
-    // Usually latest manual score wins if provided, else keep existing.
-    if (!newItem.metadata.manualScore && existingItem.metadata.manualScore) {
-      newItem.metadata.manualScore = existingItem.metadata.manualScore;
-    }
-    
-    // 4. Preserve firstSeen
-    newItem.firstSeen = existingItem.firstSeen;
-    
-    // 5. Update lastUpdated to now
-    newItem.lastUpdated = Date.now();
-    
-    // 6. Recalculate score
-    newItem.metadata.score = calculateScore(newItem);
-    
-    await store.put(newItem);
+    await store.put(mergedItem);
   } else {
-    // New item
-    if (!newItem.firstSeen) newItem.firstSeen = Date.now();
-    if (!newItem.lastUpdated) newItem.lastUpdated = Date.now();
-    newItem.metadata.score = calculateScore(newItem);
-    await store.put(newItem);
+    // 如果是新条目，确保基础字段完整
+    const itemToSave = {
+      ...newItem,
+      firstSeen: newItem.firstSeen || Date.now(),
+      lastUpdated: Date.now(),
+      actions: newItem.actions || [{ type: 'view', timestamp: Date.now() }],
+      metadata: {
+        ...newItem.metadata,
+        score: 0 // Initial
+      }
+    } as ContentItem;
+    
+    itemToSave.metadata.score = calculateScore(itemToSave);
+    await store.put(itemToSave);
   }
   
   await tx.done;

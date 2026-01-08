@@ -20,24 +20,59 @@ const DebugLogger: React.FC = () => {
 
   const copyLogs = (e: React.MouseEvent) => {
     e.stopPropagation();
-    e.preventDefault(); // 阻止默认行为
+    e.preventDefault();
     
+    console.log('[Hachimi] Attempting to copy logs, count:', logEntries.length);
+    
+    if (logEntries.length === 0) {
+      console.warn('[Hachimi] No logs to copy');
+      return;
+    }
+
+    const logText = logEntries.map(log => {
+      const time = new Date(log.timestamp).toLocaleTimeString();
+      const meta = log.metadata ? ` ${JSON.stringify(log.metadata)}` : '';
+      const excerpt = log.excerpt ? ` [Excerpt: ${log.excerpt}]` : '';
+      return `[${time}] ${log.type.toUpperCase()} ${log.message}${meta}${excerpt}`;
+    }).join('\n');
+
     try {
-      const logText = logEntries.map(log => {
-        const time = new Date(log.timestamp).toLocaleTimeString();
-        const meta = log.metadata ? ` ${JSON.stringify(log.metadata)}` : '';
-        const excerpt = log.excerpt ? ` [Excerpt: ${log.excerpt}]` : '';
-        return `[${time}] ${log.type.toUpperCase()} ${log.message}${meta}${excerpt}`;
-      }).join('\n');
+      // 强制使用传统 TextArea 方案，这在扩展 Content Script 中通常最稳健
+      const textArea = document.createElement("textarea");
+      textArea.value = logText;
       
-      navigator.clipboard.writeText(logText).then(() => {
+      // 确保它完全不可见但存在于 DOM 中
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "-9999px";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      
+      textArea.focus();
+      textArea.select();
+      
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      if (successful) {
+        console.log('[Hachimi] Copy successful');
         setIsCopied(true);
+        setTimeout(() => setIsCopied(true), 10); // 确保状态切换触发
         setTimeout(() => setIsCopied(false), 2000);
-      }).catch(err => {
-        console.error('Failed to copy:', err);
-      });
+      } else {
+        throw new Error('execCommand copy returned false');
+      }
     } catch (err) {
-      console.error('Copy error:', err);
+      console.error('[Hachimi] Copy failed:', err);
+      // 尝试最后的备选方案
+      try {
+        navigator.clipboard.writeText(logText).then(() => {
+          setIsCopied(true);
+          setTimeout(() => setIsCopied(false), 2000);
+        });
+      } catch (innerErr) {
+        console.error('[Hachimi] All copy methods failed');
+      }
     }
   };
 
@@ -67,6 +102,10 @@ const DebugLogger: React.FC = () => {
 
   const onDragStart = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    
+    // 如果点击的是按钮或其子元素，不触发拖拽，让点击事件正常流转
+    if ((e.target as HTMLElement).closest('button')) return;
+
     setIsDragging(true);
     const startX = e.clientX - pos.x;
     const startY = e.clientY - pos.y;
@@ -115,15 +154,23 @@ const DebugLogger: React.FC = () => {
           <span className="bg-blue-500/20 text-blue-400 text-[10px] px-1.5 py-0.5 rounded-full border border-blue-500/30">{logEntries.length}</span>
         </div>
         <div className="flex items-center gap-1">
-          <button 
-            onClick={copyLogs}
-            className="p-1.5 hover:bg-slate-700 rounded-md text-slate-400 hover:text-white transition-colors"
-            title="Copy Logs"
-          >
-            {isCopied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-          </button>
+          <div className="flex items-center">
+            {isCopied && <span className="text-[10px] text-green-400 font-bold mr-1 animate-pulse">COPIED!</span>}
+            <button 
+              onClick={copyLogs}
+              onMouseDown={(e) => e.stopPropagation()} // 防止触发拖拽
+              className={cn(
+                "p-1.5 hover:bg-slate-700 rounded-md transition-colors",
+                isCopied ? "text-green-400" : "text-slate-400 hover:text-white"
+              )}
+              title="Copy Logs"
+            >
+              {isCopied ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
           <button 
             onClick={(e) => { e.stopPropagation(); logger.clear(); }}
+            onMouseDown={(e) => e.stopPropagation()}
             className="p-1.5 hover:bg-slate-700 rounded-md text-slate-400 hover:text-white transition-colors"
             title="Clear Logs"
           >
@@ -131,6 +178,7 @@ const DebugLogger: React.FC = () => {
           </button>
           <button 
             onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }}
+            onMouseDown={(e) => e.stopPropagation()}
             className="p-1.5 hover:bg-slate-700 rounded-md text-slate-400 hover:text-white transition-colors"
             title={isMinimized ? "Expand" : "Collapse"}
           >
@@ -138,6 +186,7 @@ const DebugLogger: React.FC = () => {
           </button>
           <button 
             onClick={(e) => { e.stopPropagation(); setIsVisible(false); }}
+            onMouseDown={(e) => e.stopPropagation()}
             className="p-1.5 hover:bg-red-500/20 rounded-md text-slate-400 hover:text-red-400 transition-colors"
             title="Close"
           >

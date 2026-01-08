@@ -75,26 +75,25 @@ export class ZhihuObserver {
   private handleInteractionClick(btn: HTMLElement, item: ContentItem) {
     let actionType: ActionType | null = null;
     let scoreDelta = 0;
-    const text = btn.innerText || '';
+    const text = (btn.innerText || btn.getAttribute('aria-label') || '').trim();
 
     // 赞同 (VoteButton)
-    if (btn.classList.contains('VoteButton') || text.includes('赞同')) {
-      // 检查是否是取消赞同（假设点击前是 active，点击后变成 inactive，或者反之）
-      const isActive = btn.classList.contains('is-active');
+    if (btn.classList.contains('VoteButton') || btn.closest('.VoteButton') || text.includes('赞同')) {
+      const isActive = btn.classList.contains('is-active') || btn.closest('.is-active');
       if (isActive) {
-        actionType = 'unvote'; // 取消赞同
+        actionType = 'unvote';
       } else {
         actionType = 'upvote';
         scoreDelta = 2;
       }
     }
     // 收藏
-    else if (text.includes('收藏')) {
-       actionType = 'favorite';
-       scoreDelta = 2;
+    else if (text.includes('收藏') || btn.querySelector('.ContentItem-action')) {
+      actionType = 'favorite';
+      scoreDelta = 2;
     }
-    // 喜欢
-    else if (text.includes('喜欢')) {
+    // 喜欢/感谢
+    else if (text.includes('喜欢') || text.includes('感谢')) {
       actionType = 'like';
       scoreDelta = 2;
     }
@@ -104,19 +103,18 @@ export class ZhihuObserver {
       scoreDelta = 3;
     }
     // 打开评论区
-    else if (text.includes('评论')) {
+    else if (text.includes('评论') || btn.classList.contains('ContentItem-action')) {
       actionType = 'open_comment'; 
       scoreDelta = 1;
     }
     // 发送评论
-    else if (text.includes('发布')) {
+    else if (text === '发布' || text === '发送' || btn.classList.contains('CommentEditor-sendButton')) {
       actionType = 'comment';
       scoreDelta = 3;
     }
 
     if (actionType) {
-      // 记录行为
-      this.recordAction(item, actionType, scoreDelta, { source: 'click' });
+      this.recordAction(item, actionType, scoreDelta, { source: 'click', btnText: text });
       
       // 触发评分框 (仅针对正向高价值行为)
       if (['upvote', 'favorite', 'like', 'share', 'comment'].includes(actionType) && scoreDelta > 0) {
@@ -195,26 +193,21 @@ export class ZhihuObserver {
     logger.success('[Zhihu] view', item);
     this.sendMessage(item);
     
-    // 触发阅读计时
-    this.startReadTimer(item.id, el);
+    // 触发阅读计时，传入完整的 item 镜像
+    this.startReadTimer(item, el);
   }
 
-  private startReadTimer(id: string, el: HTMLElement) {
+  private startReadTimer(item: ContentItem, el: HTMLElement) {
+    const { id } = item;
     if (this.readDurationTimers.has(id)) return;
 
     const timer = setTimeout(() => {
-      logger.success('[Zhihu] Read > 30s', { id });
+      // 检查元素是否还在文档中，如果在且依然可见（或者至少曾经被认定为阅读），则记录行为
+      // 这里我们不再重新 collect，而是直接使用之前的 item 快照
+      logger.success('[Zhihu] Read > 30s', item);
       
-      // 尝试重新收集以获取最新状态，如果失败则构建最小对象
-      let item = this.collector.collect(el);
-      if (!item) {
-          item = { id, platform: 'zhihu', title: 'Unknown' } as any;
-      }
-      
-      if (item) {
-          this.recordAction(item, 'read_30s', 1);
-          this.triggerFeedback(id);
-      }
+      this.recordAction(item, 'read_30s', 1);
+      this.triggerFeedback(id);
       
       this.readDurationTimers.delete(id);
     }, 30000); // 30s
@@ -231,8 +224,14 @@ export class ZhihuObserver {
   }
 
   private sendMessage(item: ContentItem, silent = false) {
-    if (!silent && !item.actions) {
+    // 补齐 actions 逻辑，方便后台记录和重算
+    if (!item.actions || item.actions.length === 0) {
       item.actions = [{ type: 'view', timestamp: Date.now() }];
+    }
+    
+    if (!silent) {
+      const actionType = item.actions[0]?.type || 'update';
+      logger.debug(`[Zhihu] Sending ${actionType} to background`, { id: item.id, title: item.title });
     }
     
     chrome.runtime.sendMessage({ type: 'SAVE_ITEM', payload: item }, (response) => {
@@ -306,9 +305,11 @@ export class ZhihuObserver {
   private handleIntersection(el: HTMLElement) {
     const item = this.collector.collect(el);
     if (!item || !item.id) {
-      // logger.debug('[ZhihuObserver] Collector returned null or empty id for element:', el);
       return;
     }
+
+    // 给元素打标，确保 handleExit 时能找回 ID
+    el.dataset.hachimiId = item.id;
 
     const url = window.location.href;
     const isHomePage = url === 'https://www.zhihu.com/' || url.includes('zhihu.com/hot') || url.includes('zhihu.com/follow');
@@ -340,11 +341,9 @@ export class ZhihuObserver {
       // 如果已经在 view 计时中，不管
       if (this.viewTimerMap.has(item.id)) return;
       
-      // 如果已经记录过 view，这里主要负责恢复 readTimer (如果需要累计时长)
-      // 目前策略：已记录过 view，则重新启动 readTimer (30s 倒计时)
-      // 这样用户划走再回来，会重新开始 30s 计时。符合“单次连续阅读 > 30s”
+      // 如果已经记录过 view，这里负责恢复 readTimer (用户划走再回来)
       if (this.processedIds.has(item.id)) {
-        this.startReadTimer(item.id, el);
+        this.startReadTimer(item, el); // 修复传参，传入完整 item
         return; 
       }
 
@@ -361,17 +360,25 @@ export class ZhihuObserver {
   }
 
   private handleExit(el: HTMLElement) {
-    const item = this.collector.collect(el);
-    if (!item) return;
+    // 优先从 dataset 获取 ID，因为此时 DOM 结构可能已被知乎修改/回收导致 collect 失败
+    const id = el.dataset.hachimiId;
     
-    // 如果离开视口，清除 view 计时器
-    if (this.viewTimerMap.has(item.id)) {
-      clearTimeout(this.viewTimerMap.get(item.id));
-      this.viewTimerMap.delete(item.id);
+    if (id) {
+      // 1. 清除 view 计时器
+      if (this.viewTimerMap.has(id)) {
+        clearTimeout(this.viewTimerMap.get(id));
+        this.viewTimerMap.delete(id);
+      }
+      
+      // 2. 清除 read 计时器
+      this.clearReadTimer(id);
+    } else {
+      // Fallback (虽然 dataset 应该覆盖了大部分情况)
+      const item = this.collector.collect(el);
+      if (item) {
+        this.clearReadTimer(item.id);
+      }
     }
-    
-    // 清除 read 计时器
-    this.clearReadTimer(item.id);
   }
 
   private checkExpansionStrict(el: HTMLElement): boolean {

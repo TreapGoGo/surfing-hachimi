@@ -6,6 +6,7 @@ interface DeletePanelProps {
   onDeleteAll: () => Promise<void>;
   onDeleteRange: (timestamp: number) => Promise<void>;
   onClose: () => void;
+  isDisintegrating?: boolean;
 }
 
 const TIME_RANGES = [
@@ -17,7 +18,7 @@ const TIME_RANGES = [
   { label: '1年前', value: 365 * 24 * 60 * 60 * 1000 },
 ];
 
-export default function DeletePanel({ onDeleteAll, onDeleteRange, onClose }: DeletePanelProps) {
+export default function DeletePanel({ onDeleteAll, onDeleteRange, onClose, isDisintegrating }: DeletePanelProps) {
   const [selectedRange, setSelectedRange] = useState(TIME_RANGES[0]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isPressing, setIsPressing] = useState(false);
@@ -27,7 +28,7 @@ export default function DeletePanel({ onDeleteAll, onDeleteRange, onClose }: Del
   const timerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  const PRESS_DURATION = 5000;
+  const PRESS_DURATION = 3000;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -40,8 +41,9 @@ export default function DeletePanel({ onDeleteAll, onDeleteRange, onClose }: Del
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const startPress = () => {
+  const startPress = (e: React.MouseEvent | React.TouchEvent) => {
     if (isDeleting) return;
+    e.preventDefault();
     setIsPressing(true);
     setProgress(0);
     startTimeRef.current = Date.now();
@@ -77,7 +79,6 @@ export default function DeletePanel({ onDeleteAll, onDeleteRange, onClose }: Del
     await onDeleteAll();
     setIsDeleting(false);
     setProgress(0);
-    onClose();
   };
 
   const handleRangeDelete = async () => {
@@ -85,7 +86,6 @@ export default function DeletePanel({ onDeleteAll, onDeleteRange, onClose }: Del
     setIsDeleting(true);
     await onDeleteRange(cutoff);
     setIsDeleting(false);
-    onClose();
   };
 
   useEffect(() => {
@@ -95,8 +95,28 @@ export default function DeletePanel({ onDeleteAll, onDeleteRange, onClose }: Del
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md border border-slate-200 animate-in zoom-in-95 duration-300 relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div 
+        className={cn(
+          "absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity duration-500",
+          isDisintegrating ? "opacity-0" : "opacity-100"
+        )} 
+        onClick={!isDisintegrating ? onClose : undefined} 
+      />
+      
+      {/* Panel */}
+      <div 
+        className={cn(
+          "bg-white rounded-[24px] shadow-2xl w-full max-w-md border border-slate-200 relative transition-all duration-300",
+          isDisintegrating ? "disintegrate-item" : "scale-100 opacity-100 animate-in zoom-in-95 duration-300"
+        )}
+        style={isDisintegrating ? {
+          '--dx': '0px',
+          '--dy': '100px',
+          '--dr': '10deg',
+        } as React.CSSProperties : undefined}
+      >
         {/* Header */}
         <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between rounded-t-[24px] overflow-hidden">
           <div className="flex items-center gap-3">
@@ -210,29 +230,51 @@ export default function DeletePanel({ onDeleteAll, onDeleteRange, onClose }: Del
               disabled={isDeleting}
               className={cn(
                 "relative w-full py-4 rounded-xl border-2 border-rose-500 text-rose-500 font-black overflow-hidden transition-all select-none group",
-                isPressing && "scale-95",
+                isPressing && "scale-[0.98] shadow-inner",
                 isDeleting && "opacity-50 cursor-not-allowed"
               )}
             >
-              {/* Progress Bar Background */}
+              {/* Progress Bar Background Layer */}
               <div 
-                className="absolute left-0 top-0 bottom-0 bg-rose-500/10 transition-all duration-75 ease-linear pointer-events-none"
-                style={{ width: `${progress}%` }}
+                className="absolute inset-0 bg-rose-500 opacity-0 transition-opacity duration-300 pointer-events-none"
+                style={{ opacity: isPressing ? 0.05 : 0 }}
               />
               
-              {/* Inner Progress Bar */}
+              {/* Primary Progress Bar - Darker and more visible */}
               <div 
-                className="absolute left-0 bottom-0 h-1 bg-rose-500 transition-all duration-75 ease-linear pointer-events-none"
+                className="absolute left-0 top-0 bottom-0 bg-rose-500/30 pointer-events-none z-0"
                 style={{ width: `${progress}%` }}
               />
 
+              {/* Bottom Progress Accent Line - Thicker */}
+              <div 
+                className="absolute left-0 bottom-0 h-2 bg-rose-600 pointer-events-none z-10"
+                style={{ width: `${progress}%` }}
+              />
+
+              {/* Scanning Glow Effect */}
+              {isPressing && (
+                <div 
+                  className="absolute top-0 bottom-0 w-32 bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none z-5"
+                  style={{ animation: 'scan 1.5s infinite' }}
+                />
+              )}
+
               {/* Text with shake effect */}
               <span className={cn(
-                "relative z-10 flex items-center justify-center gap-2 text-sm uppercase tracking-widest",
-                isPressing && "animate-[shake_0.2s_infinite]"
-              )}>
-                <Trash2 size={18} />
-                {isPressing ? `正在清理中 (${Math.ceil((PRESS_DURATION - (progress/100 * PRESS_DURATION))/1000)}s)` : '长按5秒删除全部，此操作不可撤销'}
+                "relative z-20 flex flex-col items-center justify-center gap-1 text-xs uppercase tracking-widest transition-transform",
+                isPressing && "text-rose-700 font-bold"
+              )}
+              style={isPressing ? { animation: 'shake 0.1s infinite' } : {}}>
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <Trash2 size={18} />
+                  {isPressing ? '正在确认删除...' : '长按 5 秒清空全部记录'}
+                </div>
+                {isPressing && (
+                  <span className="text-[10px] font-mono opacity-80">
+                    进度: {Math.floor(progress)}%
+                  </span>
+                )}
               </span>
             </button>
             
@@ -244,6 +286,10 @@ export default function DeletePanel({ onDeleteAll, onDeleteRange, onClose }: Del
       </div>
 
       <style>{`
+        @keyframes scan {
+          from { transform: translateX(-100%) skewX(-20deg); }
+          to { transform: translateX(500%) skewX(-20deg); }
+        }
         @keyframes shake {
           0% { transform: translate(1px, 1px) rotate(0deg); }
           10% { transform: translate(-1px, -2px) rotate(-1deg); }

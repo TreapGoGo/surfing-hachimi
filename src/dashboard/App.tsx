@@ -11,6 +11,7 @@ export default function App() {
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeletePanel, setShowDeletePanel] = useState(false);
+  const [isDisintegrating, setIsDisintegrating] = useState(false);
 
   const loadData = async () => {
     try {
@@ -30,21 +31,30 @@ export default function App() {
 
   const handleClearAll = async () => {
     try {
+      setIsDisintegrating(true);
+      // Wait for animation to play out (1.5s total duration, we wait 1.2s to start clearing)
+      await new Promise(resolve => setTimeout(resolve, 1200));
       await clearAllItems();
       setItems([]);
       setShowDeletePanel(false);
     } catch (e) {
       console.error('Failed to clear data', e);
+    } finally {
+      setIsDisintegrating(false);
     }
   };
 
   const handleClearRange = async (timestamp: number) => {
     try {
+      setIsDisintegrating(true);
+      await new Promise(resolve => setTimeout(resolve, 1200));
       await deleteItemsBefore(timestamp);
       await loadData();
       setShowDeletePanel(false);
     } catch (e) {
       console.error('Failed to clear data', e);
+    } finally {
+      setIsDisintegrating(false);
     }
   };
 
@@ -93,17 +103,17 @@ export default function App() {
                 <Loader2 className="animate-spin mb-4" size={32} />
                 <p>正在同步您的冲浪足迹...</p>
               </div>
-            ) : items.length === 0 ? (
+            ) : items.length === 0 && !isDisintegrating ? (
               <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200">
                 <p className="text-slate-400">暂无真实记录，快去知乎或 B 站转转吧！</p>
               </div>
             ) : (
-              <Waterfall items={items} />
+              <Waterfall items={items} isDisintegrating={isDisintegrating} />
             )}
           </div>
         </div>
 
-        {/* Right Sidebar: Time Capsule */}
+        {/* Right Sidebar: Time Capsule (Optional/Summary) */}
         <div className="w-[320px] p-6 border-l border-slate-200 hidden xl:block bg-white/50 backdrop-blur-sm sticky top-0 h-screen overflow-y-auto">
           <TimeCapsule items={items} />
         </div>
@@ -111,11 +121,35 @@ export default function App() {
 
       {showDeletePanel && (
         <DeletePanel 
-          onDeleteAll={handleClearAll}
-          onDeleteRange={handleClearRange}
-          onClose={() => setShowDeletePanel(false)}
+          onDeleteAll={handleClearAll} 
+          onDeleteRange={handleClearRange} 
+          onClose={() => setShowDeletePanel(false)} 
+          isDisintegrating={isDisintegrating}
         />
       )}
+
+      {/* Disintegration Animation CSS */}
+      <style>{`
+        @keyframes disintegrate {
+          0% {
+            opacity: 1;
+            transform: translate(0, 0) scale(1) rotate(0deg);
+            filter: blur(0px);
+          }
+          20% {
+            filter: blur(1px) contrast(120%);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(var(--dx), var(--dy)) scale(0.8) rotate(var(--dr));
+            filter: blur(8px) brightness(1.5);
+          }
+        }
+        .disintegrate-item {
+          animation: disintegrate 1s forwards cubic-bezier(0.4, 0, 0.2, 1);
+          pointer-events: none;
+        }
+      `}</style>
     </div>
   )
 }

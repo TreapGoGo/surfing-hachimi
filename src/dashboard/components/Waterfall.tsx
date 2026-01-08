@@ -1,5 +1,6 @@
 import type { ContentItem } from '@/shared/types';
 import Card from '@/shared/components/Card';
+import { cn } from '@/shared/utils/cn';
 
 interface WaterfallProps {
   items: ContentItem[];
