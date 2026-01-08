@@ -7,7 +7,7 @@ import ResonanceLab from './pages/ResonanceLab';
 import Toast from '@/shared/components/Toast';
 import type { ToastType } from '@/shared/components/Toast';
 import { cn } from '@/shared/utils/cn';
-import { Search, Filter, Loader2, Trash2, ListChecks, X, ChevronDown, Clock, ChevronRight, Check, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, Filter, Loader2, Trash2, ListChecks, X, ChevronDown, Clock, ChevronRight, Check, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown, Copy } from 'lucide-react';
 
 const INTERACTION_OPTIONS = [
   // 评分标签 (现更名为评价)
@@ -35,7 +35,7 @@ const PLATFORM_OPTIONS = [
 ];
 import { useEffect, useState, useRef } from 'react';
 import { getAllItems, clearAllItems, deleteItemsBefore, deleteMultipleItems } from '@/shared/db';
-import { getSettings, applySettingsToDOM } from '@/shared/utils/settings';
+import { getSettings, applySettingsToDOM, saveSettings } from '@/shared/utils/settings';
 import { formatContentForCopy } from '@/shared/utils/format';
 import type { ContentItem } from '@/shared/types';
 
@@ -66,6 +66,13 @@ export default function App() {
   const [selectedInteractions, setSelectedInteractions] = useState<string[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const filterMenuRef = useRef<HTMLDivElement>(null);
+  
+  // 批量复制预览状态
+  const [showCopyPreview, setShowCopyPreview] = useState(false);
+  const [copyPreviewText, setCopyPreviewText] = useState('');
+  const [skipCopyPreview, setSkipCopyPreview] = useState(false);
+  const [dontShowAgainChecked, setDontShowAgainChecked] = useState(false);
+
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
     message: '',
@@ -101,6 +108,7 @@ export default function App() {
     // 初始化设置
     getSettings().then(settings => {
       applySettingsToDOM(settings);
+      setSkipCopyPreview(!!settings.skipCopyPreview);
     });
 
     // 监听设置更新
@@ -290,15 +298,39 @@ export default function App() {
     const text = selectedItems.map((item, index) => {
       return formatContentForCopy(item, index + 1);
     }).join('\n\n\n');
+    
+    if (skipCopyPreview) {
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast(`已复制 ${selectedItems.length} 条内容`, 'success');
+        setIsSelectMode(false);
+        setSelectedIds([]);
+      } catch (err) {
+        console.error('Failed to copy: ', err);
+        showToast('复制失败', 'error');
+      }
+    } else {
+      setCopyPreviewText(text);
+      setShowCopyPreview(true);
+    }
+  };
 
+  const executeBatchCopy = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      showToast(`已复制 ${selectedItems.length} 条内容`, 'success');
+      await navigator.clipboard.writeText(copyPreviewText);
+      showToast('内容已复制到剪贴板', 'success');
+      
+      if (dontShowAgainChecked) {
+        const settings = await getSettings();
+        await saveSettings({ ...settings, skipCopyPreview: true });
+        setSkipCopyPreview(true);
+      }
+      
+      setShowCopyPreview(false);
       setIsSelectMode(false);
       setSelectedIds([]);
     } catch (err) {
-      console.error('Failed to copy: ', err);
-      showToast('复制失败', 'error');
+      showToast('复制失败，请重试', 'error');
     }
   };
 
@@ -783,6 +815,61 @@ export default function App() {
 
             {/* Right Sidebar: Timeline */}
             <TimeCapsule items={items} />
+
+            {/* 批量复制预览弹窗 */}
+            {showCopyPreview && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-300">
+                <div className="bg-white w-full max-w-4xl h-[85vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+                  <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-800">批量复制预览</h3>
+                      <p className="text-sm text-slate-500 mt-0.5">确认即将复制到剪贴板的内容</p>
+                    </div>
+                    <button 
+                      onClick={() => setShowCopyPreview(false)}
+                      className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+                    >
+                      <X size={24} className="text-slate-400" />
+                    </button>
+                  </div>
+                  
+                  <div className="flex-1 p-6 overflow-hidden flex flex-col gap-4">
+                    <div className="flex-1 bg-slate-50 rounded-2xl border border-slate-200 p-4 overflow-hidden flex flex-col">
+                      <textarea 
+                        readOnly
+                        value={copyPreviewText}
+                        className="flex-1 w-full bg-transparent border-none focus:ring-0 text-slate-600 font-mono text-sm resize-none scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent"
+                      />
+                    </div>
+                    
+                    <div className="flex flex-col items-center gap-4 py-2">
+                      <button 
+                        onClick={executeBatchCopy}
+                        className="w-full max-w-md py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl text-xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+                      >
+                        <Copy size={24} />
+                        执行批量复制
+                      </button>
+                      
+                      <label className="flex items-center gap-3 cursor-pointer group select-none">
+                        <div className="relative flex items-center">
+                          <input 
+                            type="checkbox" 
+                            checked={dontShowAgainChecked}
+                            onChange={(e) => setDontShowAgainChecked(e.target.checked)}
+                            className="peer appearance-none w-5 h-5 border-2 border-slate-300 rounded-lg checked:bg-blue-500 checked:border-blue-500 transition-all"
+                          />
+                          <Check size={14} className="absolute left-0.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity" />
+                        </div>
+                        <span className="text-base font-medium text-slate-600 group-hover:text-blue-600 transition-colors">
+                          以后不再提示，直接复制
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : activeTab === 'settings' ? (
           <div className="flex-1 w-full">

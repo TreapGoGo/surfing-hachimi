@@ -72,4 +72,5 @@ export interface ContentItem {
 export interface AppSettings {
   fontSize: 'small' | 'medium' | 'large';
   theme?: 'light' | 'dark' | 'auto';
+  skipCopyPreview?: boolean;
 }
