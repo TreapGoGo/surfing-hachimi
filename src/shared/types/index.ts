@@ -14,6 +14,7 @@ export type ActionType =
   | 'coin' 
   | 'share' 
   | 'comment' 
+  | 'open_comment'
   | 'danmaku' 
   | 'triple' 
   | 'manual_score';

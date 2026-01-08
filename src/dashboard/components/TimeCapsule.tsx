@@ -29,6 +29,7 @@ export default function TimeCapsule({ items }: TimeCapsuleProps) {
           🎲 时光胶囊
         </h2>
         <button 
+          type="button"
           onClick={() => setSeed(s => s + 1)}
           className="text-indigo-400 hover:text-indigo-600 transition-colors p-1 rounded-full hover:bg-indigo-100"
         >

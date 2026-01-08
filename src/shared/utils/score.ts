@@ -6,6 +6,7 @@ const ZHIHU_SCORES: Partial<Record<ActionType, number>> = {
   like: 2,
   star: 2,
   comment: 3,
+  open_comment: 1,
   share: 3,
 };
 

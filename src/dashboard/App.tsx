@@ -1,30 +1,52 @@
 import Sidebar from './components/Sidebar';
 import Waterfall from './components/Waterfall';
 import TimeCapsule from './components/TimeCapsule';
-import { mockItems } from './mockData';
-import { Search, Filter, Loader2 } from 'lucide-react';
+import DeletePanel from './components/DeletePanel';
+import { Search, Filter, Loader2, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { getAllItems } from '@/shared/db';
+import { getAllItems, clearAllItems, deleteItemsBefore } from '@/shared/db';
 import type { ContentItem } from '@/shared/types';
 
 export default function App() {
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showDeletePanel, setShowDeletePanel] = useState(false);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const data = await getAllItems();
+      setItems(data.length > 0 ? data : []);
+    } catch (e) {
+      console.error('Failed to load data', e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const data = await getAllItems();
-        // 如果数据库为空，使用 mock 数据作为占位（可选，或者直接显示为空）
-        setItems(data.length > 0 ? data : []);
-      } catch (e) {
-        console.error('Failed to load data', e);
-      } finally {
-        setLoading(false);
-      }
-    };
     loadData();
   }, []);
+
+  const handleClearAll = async () => {
+    try {
+      await clearAllItems();
+      setItems([]);
+      setShowDeletePanel(false);
+    } catch (e) {
+      console.error('Failed to clear data', e);
+    }
+  };
+
+  const handleClearRange = async (timestamp: number) => {
+    try {
+      await deleteItemsBefore(timestamp);
+      await loadData();
+      setShowDeletePanel(false);
+    } catch (e) {
+      console.error('Failed to clear data', e);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">
@@ -51,7 +73,15 @@ export default function App() {
                   className="pl-9 pr-4 py-2 rounded-full bg-white border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-64 transition-shadow"
                 />
               </div>
-              <button className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">
+              <button 
+                type="button"
+                onClick={() => setShowDeletePanel(true)}
+                className="p-2 bg-white border border-slate-200 rounded-lg text-rose-500 hover:bg-rose-50 hover:border-rose-100 transition-colors"
+                title="清空记录"
+              >
+                <Trash2 size={18} />
+              </button>
+              <button type="button" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">
                 <Filter size={18} />
               </button>
             </div>
@@ -78,6 +108,14 @@ export default function App() {
           <TimeCapsule items={items} />
         </div>
       </main>
+
+      {showDeletePanel && (
+        <DeletePanel 
+          onDeleteAll={handleClearAll}
+          onDeleteRange={handleClearRange}
+          onClose={() => setShowDeletePanel(false)}
+        />
+      )}
     </div>
   )
 }

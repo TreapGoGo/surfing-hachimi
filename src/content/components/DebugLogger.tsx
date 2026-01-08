@@ -20,17 +20,25 @@ const DebugLogger: React.FC = () => {
 
   const copyLogs = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const logText = logEntries.map(log => {
-      const time = new Date(log.timestamp).toLocaleTimeString();
-      const meta = log.metadata ? ` ${JSON.stringify(log.metadata)}` : '';
-      const excerpt = log.excerpt ? ` [Excerpt: ${log.excerpt}]` : '';
-      return `[${time}] ${log.type.toUpperCase()} ${log.message}${meta}${excerpt}`;
-    }).join('\n');
+    e.preventDefault(); // 阻止默认行为
     
-    navigator.clipboard.writeText(logText).then(() => {
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-    });
+    try {
+      const logText = logEntries.map(log => {
+        const time = new Date(log.timestamp).toLocaleTimeString();
+        const meta = log.metadata ? ` ${JSON.stringify(log.metadata)}` : '';
+        const excerpt = log.excerpt ? ` [Excerpt: ${log.excerpt}]` : '';
+        return `[${time}] ${log.type.toUpperCase()} ${log.message}${meta}${excerpt}`;
+      }).join('\n');
+      
+      navigator.clipboard.writeText(logText).then(() => {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+      });
+    } catch (err) {
+      console.error('Copy error:', err);
+    }
   };
 
   // 订阅状态更新 UI

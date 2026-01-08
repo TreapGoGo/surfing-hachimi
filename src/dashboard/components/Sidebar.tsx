@@ -26,6 +26,7 @@ export default function Sidebar({ className }: SidebarProps) {
         {menuItems.map((item) => (
           <button 
             key={item.label}
+            type="button"
             className={cn(
               "p-2 rounded-xl transition-colors",
               item.active ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
@@ -41,6 +42,7 @@ export default function Sidebar({ className }: SidebarProps) {
         {bottomItems.map((item) => (
           <button 
             key={item.label}
+            type="button"
             className="text-slate-400 hover:text-slate-600 p-2 transition-colors"
             title={item.label}
           >

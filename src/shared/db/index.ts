@@ -43,6 +43,27 @@ export async function getAllItems() {
   return db.getAll('items');
 }
 
+export async function clearAllItems() {
+  const db = await initDB();
+  const tx = db.transaction('items', 'readwrite');
+  await tx.objectStore('items').clear();
+  await tx.done;
+}
+
+export async function deleteItemsBefore(timestamp: number) {
+  const db = await initDB();
+  const tx = db.transaction('items', 'readwrite');
+  const store = tx.objectStore('items');
+  const index = store.index('by-lastUpdated');
+  
+  let cursor = await index.openCursor(IDBKeyRange.upperBound(timestamp));
+  while (cursor) {
+    await cursor.delete();
+    cursor = await cursor.continue();
+  }
+  await tx.done;
+}
+
 export async function getRecentItems(limit = 50) {
   const db = await initDB();
   const index = db.transaction('items').store.index('by-lastUpdated');

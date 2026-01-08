@@ -1,57 +1,190 @@
 import { ZhihuCollector } from './collector';
 import { logger } from '../../shared/utils/logger';
-import { ContentItem } from '../../shared/types';
+import type { ContentItem, ActionType } from '../../shared/types';
 
 export class ZhihuObserver {
   private observer: IntersectionObserver | null = null;
   private collector: ZhihuCollector;
   private viewTimerMap: Map<string, number> = new Map();
+  private readDurationTimers: Map<string, NodeJS.Timeout> = new Map(); // 30s 阅读计时器
   private observedElements: WeakSet<Element> = new WeakSet();
   private processedIds: Set<string> = new Set(); // 记录当前会话已处理的 ID
 
   constructor() {
     this.collector = new ZhihuCollector();
+    
+    // 监听主动评分事件
+    window.addEventListener('SURFING_HACHIMI_MANUAL_SCORE', ((e: CustomEvent) => {
+      const { id, score } = e.detail;
+      this.handleManualScore(id, score);
+    }) as EventListener);
+
+    // 监听不记录事件
+    window.addEventListener('SURFING_HACHIMI_EXEMPT', ((e: CustomEvent) => {
+      const { id } = e.detail;
+      this.handleExempt(id);
+    }) as EventListener);
   }
 
   public init() {
     this.setupIntersectionObserver();
     this.startMutationObserver();
-    this.setupClickListeners(); // 新增：点击事件监听
+    this.setupClickListeners(); // 包含展开和互动监听
     
     // 针对回答直达页的主动检查
     this.checkMainAnswerOnLoad();
   }
 
   private setupClickListeners() {
-    // 使用事件委托处理展开行为
+    // 使用事件委托处理所有点击行为
     document.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       
-      // 1. 寻找是否点击了“阅读全文”或类似的展开按钮
+      // --- 1. 展开行为监测 ---
       const expandBtn = target.closest('.ContentItem-more, .ContentItem-expandButton, .QuestionMainAction');
       if (expandBtn) {
         const itemEl = expandBtn.closest('.ContentItem, .ArticleItem, .PinItem, .ZVideoItem, .QuestionAnswer-content');
         if (itemEl) {
-          // 点击展开后，稍等片刻待内容加载后再记录
           setTimeout(() => this.handleExpansion(itemEl as HTMLElement), 500);
         }
-        return;
+        // 不 return，继续检查是否也是互动行为（虽然不太可能重叠）
       }
 
-      // 2. 某些情况下点击卡片本身也会展开（比如首页卡片）
       const cardEl = target.closest('.ContentItem, .ArticleItem');
       if (cardEl && !this.checkExpansionStandard(cardEl as HTMLElement)) {
-        // 如果点击了卡片且当前是折叠状态，可能触发了展开
         setTimeout(() => this.handleExpansion(cardEl as HTMLElement), 1000);
       }
+
+      // --- 2. 互动行为监测 ---
+      // 必须在卡片内部
+      const contentItemEl = target.closest('.ContentItem, .ArticleItem, .PinItem, .ZVideoItem, .QuestionAnswer-content');
+      if (!contentItemEl) return;
+
+      const item = this.collector.collect(contentItemEl as HTMLElement);
+      if (!item) return;
+
+      // 向上查找按钮
+      const btn = target.closest('button');
+      if (!btn) return;
+
+      this.handleInteractionClick(btn as HTMLElement, item);
+
     }, true);
+  }
+
+  private handleInteractionClick(btn: HTMLElement, item: ContentItem) {
+    let actionType: ActionType | null = null;
+    let scoreDelta = 0;
+    const text = btn.innerText || '';
+
+    // 赞同 (VoteButton)
+    if (btn.classList.contains('VoteButton') || text.includes('赞同')) {
+      // 检查是否是取消赞同（假设点击前是 active，点击后变成 inactive，或者反之）
+      const isActive = btn.classList.contains('is-active');
+      if (isActive) {
+        actionType = 'unvote'; // 取消赞同
+      } else {
+        actionType = 'upvote';
+        scoreDelta = 2;
+      }
+    }
+    // 收藏
+    else if (text.includes('收藏')) {
+       actionType = 'favorite';
+       scoreDelta = 2;
+    }
+    // 喜欢
+    else if (text.includes('喜欢')) {
+      actionType = 'like';
+      scoreDelta = 2;
+    }
+    // 分享
+    else if (text.includes('分享')) {
+      actionType = 'share';
+      scoreDelta = 3;
+    }
+    // 打开评论区
+    else if (text.includes('评论')) {
+      actionType = 'open_comment'; 
+      scoreDelta = 1;
+    }
+    // 发送评论
+    else if (text.includes('发布')) {
+      actionType = 'comment';
+      scoreDelta = 3;
+    }
+
+    if (actionType) {
+      // 记录行为
+      this.recordAction(item, actionType, scoreDelta, { source: 'click' });
+      
+      // 触发评分框 (仅针对正向高价值行为)
+      if (['upvote', 'favorite', 'like', 'share', 'comment'].includes(actionType) && scoreDelta > 0) {
+        this.triggerFeedback(item.id);
+      }
+    }
+  }
+
+  private recordAction(item: ContentItem, type: ActionType, scoreAdd: number = 0, payload: any = {}) {
+    logger.success(`[Zhihu] Action: ${type}`, { ...item, excerpt: item.contentExcerpt });
+    
+    const action = {
+      type,
+      timestamp: Date.now(),
+      payload
+    };
+
+    // 构造更新用的 Item
+    const updateItem = {
+      ...item,
+      actions: [action]
+    };
+
+    this.sendMessage(updateItem, true); // silent=true, 避免重复打印 view 日志
+  }
+
+  private handleManualScore(id: string, score: number) {
+    const action = { type: 'manual_score' as ActionType, timestamp: Date.now(), metadata: { score } };
+    
+    // 构造一个最小的 ContentItem 用于更新
+    const updateItem = {
+      id,
+      platform: 'zhihu',
+      actions: [action],
+      metadata: { manualScore: score }
+    } as any; 
+
+    this.sendMessage(updateItem, true);
+  }
+
+  private handleExempt(id: string) {
+    logger.info(`[Zhihu] User exempt item: ${id}`);
+    
+    // 1. 从已处理集合中移除，允许以后再次记录（如果用户改变主意或刷新）
+    this.processedIds.delete(id);
+    
+    // 2. 清除相关的阅读计时器
+    this.clearReadTimer(id);
+    
+    // 3. 通知后台删除该记录
+    chrome.runtime.sendMessage({ type: 'DELETE_ITEM', payload: { id } }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('[Hachimi] Delete failed:', chrome.runtime.lastError);
+      } else {
+        logger.success(`[Zhihu] Item ${id} has been exempted and deleted from database`);
+      }
+    });
+  }
+
+  private triggerFeedback(id: string) {
+    window.dispatchEvent(new CustomEvent('SURFING_HACHIMI_SHOW_FEEDBACK', {
+      detail: { id }
+    }));
   }
 
   private handleExpansion(el: HTMLElement) {
     const item = this.collector.collect(el);
     if (!item || this.processedIds.has(item.id)) return;
-
-    // 只要触发了展开，且没被记录过，就直接记录
     this.recordView(el, item);
   }
 
@@ -59,16 +192,46 @@ export class ZhihuObserver {
     if (this.processedIds.has(item.id)) return;
     this.processedIds.add(item.id);
 
-    // 无论数据库是否已有，只要是本页面第一次抓到，就正常显示 success 日志
     logger.success('[Zhihu] view', item);
-    
-    // 发送给后台存储，后台会自动处理 merge
     this.sendMessage(item);
+    
+    // 触发阅读计时
+    this.startReadTimer(item.id, el);
+  }
+
+  private startReadTimer(id: string, el: HTMLElement) {
+    if (this.readDurationTimers.has(id)) return;
+
+    const timer = setTimeout(() => {
+      logger.success('[Zhihu] Read > 30s', { id });
+      
+      // 尝试重新收集以获取最新状态，如果失败则构建最小对象
+      let item = this.collector.collect(el);
+      if (!item) {
+          item = { id, platform: 'zhihu', title: 'Unknown' } as any;
+      }
+      
+      if (item) {
+          this.recordAction(item, 'read_30s', 1);
+          this.triggerFeedback(id);
+      }
+      
+      this.readDurationTimers.delete(id);
+    }, 30000); // 30s
+
+    this.readDurationTimers.set(id, timer);
+  }
+
+  private clearReadTimer(id: string) {
+    const timer = this.readDurationTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      this.readDurationTimers.delete(id);
+    }
   }
 
   private sendMessage(item: ContentItem, silent = false) {
-    // 增加一个 view action
-    if (!silent) {
+    if (!silent && !item.actions) {
       item.actions = [{ type: 'view', timestamp: Date.now() }];
     }
     
@@ -143,7 +306,7 @@ export class ZhihuObserver {
   private handleIntersection(el: HTMLElement) {
     const item = this.collector.collect(el);
     if (!item || !item.id) {
-      logger.debug('[ZhihuObserver] Collector returned null or empty id for element:', el);
+      // logger.debug('[ZhihuObserver] Collector returned null or empty id for element:', el);
       return;
     }
 
@@ -159,28 +322,30 @@ export class ZhihuObserver {
       const mainAnswerId = match ? match[1] : null;
       
       if (item.id === mainAnswerId) {
-        // 1. 如果是主回答，默认就是展开的
         isExpanded = true;
         waitTime = 500;
       } else {
-        // 2. 如果是后续回答，检查是否已展开或本身就很短
         isExpanded = this.checkExpansionStandard(el);
         waitTime = 1000;
       }
     } else if (isHomePage) {
-      // 首页卡片：必须是展开状态才算 view
       isExpanded = this.checkExpansionStandard(el);
       waitTime = 1500;
     } else {
-      // 其他页面（问题页列表）：标准模式
       isExpanded = this.checkExpansionStandard(el);
       waitTime = 1000;
     }
 
     if (isExpanded) {
-      if (this.viewTimerMap.has(item.id)) {
-        logger.debug(`[ZhihuObserver] Timer already exists for id: ${item.id}`);
-        return;
+      // 如果已经在 view 计时中，不管
+      if (this.viewTimerMap.has(item.id)) return;
+      
+      // 如果已经记录过 view，这里主要负责恢复 readTimer (如果需要累计时长)
+      // 目前策略：已记录过 view，则重新启动 readTimer (30s 倒计时)
+      // 这样用户划走再回来，会重新开始 30s 计时。符合“单次连续阅读 > 30s”
+      if (this.processedIds.has(item.id)) {
+        this.startReadTimer(item.id, el);
+        return; 
       }
 
       const timer = window.setTimeout(() => {
@@ -199,20 +364,17 @@ export class ZhihuObserver {
     const item = this.collector.collect(el);
     if (!item) return;
     
-    // 如果离开视口，清除计时器
+    // 如果离开视口，清除 view 计时器
     if (this.viewTimerMap.has(item.id)) {
       clearTimeout(this.viewTimerMap.get(item.id));
       this.viewTimerMap.delete(item.id);
     }
+    
+    // 清除 read 计时器
+    this.clearReadTimer(item.id);
   }
 
-  /**
-   * 严格模式（首页）：宁可漏杀，不可误杀
-   * 只有探测到明确的“收起”按钮，才视为展开
-   */
   private checkExpansionStrict(el: HTMLElement): boolean {
-    // 1. 检查是否有“收起”按钮 (Text content check)
-    // 这是一个非常重的检查，所以我们在前面尽量过滤
     const buttons = Array.from(el.querySelectorAll('button'));
     const hasCollapseBtn = buttons.some(b => {
       return b.innerText.includes('收起') && this.isElementVisible(b);
@@ -220,37 +382,26 @@ export class ZhihuObserver {
 
     if (hasCollapseBtn) return true;
 
-    // 2. 反向检查：如果有“阅读全文”，那肯定是折叠的
     const hasReadMore = buttons.some(b => {
       return (b.innerText.includes('阅读全文') || b.classList.contains('ContentItem-more')) && this.isElementVisible(b);
     });
     
     if (hasReadMore) return false;
 
-    // 3. 既没有收起也没有阅读全文？
-    // 可能是短内容（Pin/Video）。
-    // 为了安全，我们假设它是折叠的，除非它是特定的短内容类型且高度很小
-    // 但鉴于用户痛恨误报，我们这里直接返回 false
     return false;
   }
 
-  /**
-   * 标准模式（问题页）：默认宽容
-   */
   private checkExpansionStandard(el: HTMLElement): boolean {
-    // 1. 如果有“阅读全文”按钮且可见，说明没展开
     const moreBtn = el.querySelector('.ContentItem-more, .ContentItem-expandButton');
     if (moreBtn && (moreBtn as HTMLElement).offsetParent !== null) {
       return false;
     }
 
-    // 2. 检查是否有折叠样式
     const richContent = el.querySelector('.RichContent');
     if (richContent && (richContent.classList.contains('RichContent--collapsed') || richContent.classList.contains('is-collapsed'))) {
       return false;
     }
 
-    // 3. 如果以上都没有，或者内容已经完整显示（RichContent-inner 可见且无截断），判定为展开
     return true;
   }
 
@@ -262,7 +413,6 @@ export class ZhihuObserver {
     const rect = el.getBoundingClientRect();
     const windowHeight = window.innerHeight || document.documentElement.clientHeight;
     
-    // 只要还在视口内（有一部分可见）
     return (
       rect.top <= windowHeight &&
       rect.bottom >= 0 &&

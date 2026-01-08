@@ -1,4 +1,4 @@
-import { mergeAndSaveItem, getItem } from '@/shared/db';
+import { mergeAndSaveItem, getItem, deleteItem } from '@/shared/db';
 import type { ContentItem } from '@/shared/types';
 
 // 全局日志缓存
@@ -30,6 +30,21 @@ chrome.runtime.onMessage.addListener((message: any, sender: chrome.runtime.Messa
         sendResponse({ exists: !!item });
       } catch (e) {
         sendResponse({ exists: false });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === 'DELETE_ITEM') {
+    const { id } = message.payload;
+    (async () => {
+      try {
+        await deleteItem(id);
+        console.log('Item deleted:', id);
+        sendResponse({ success: true });
+      } catch (e) {
+        console.error('Delete failed', e);
+        sendResponse({ success: false, error: e });
       }
     })();
     return true;

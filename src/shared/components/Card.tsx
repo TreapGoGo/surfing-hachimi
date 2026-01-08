@@ -12,7 +12,8 @@ interface CardProps {
 
 export default function Card({ item, className }: CardProps) {
   const isBilibili = item.platform === 'bilibili';
-  const level = getLevel(item.metadata.score);
+  const score = item.metadata?.score || 0;
+  const level = getLevel(score);
   
   const scoreColor = {
     1: 'text-slate-500',
@@ -21,7 +22,7 @@ export default function Card({ item, className }: CardProps) {
     4: 'text-yellow-500',
   }[level];
 
-  const formattedTime = formatDistanceToNow(item.lastUpdated, { addSuffix: true, locale: zhCN });
+  const formattedTime = formatDistanceToNow(item.lastUpdated || Date.now(), { addSuffix: true, locale: zhCN });
 
   return (
     <div className={cn("bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow", className)}>
@@ -29,7 +30,7 @@ export default function Card({ item, className }: CardProps) {
       {isBilibili && item.cover && (
         <div className="relative aspect-video bg-slate-100">
           <img src={item.cover} alt={item.title} className="w-full h-full object-cover" />
-          {item.metadata.duration && (
+          {item.metadata?.duration && (
             <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1 rounded">
               {formatDuration(item.metadata.duration)}
             </div>
@@ -43,7 +44,7 @@ export default function Card({ item, className }: CardProps) {
           <div className="flex items-center gap-1">
             <span className={cn("font-bold flex items-center gap-0.5", scoreColor)}>
               <Zap size={12} fill="currentColor" />
-              {item.metadata.score}分
+              {score}分
             </span>
             <span>·</span>
             <span className={isBilibili ? "text-pink-500" : "text-blue-500"}>
@@ -62,14 +63,14 @@ export default function Card({ item, className }: CardProps) {
 
         {/* Author */}
         <div className="flex items-center text-xs text-slate-500">
-          <span>@{item.author.name}</span>
-          {isBilibili && item.metadata.views && (
+          <span>@{item.author?.name || '未知作者'}</span>
+          {isBilibili && item.metadata?.views && (
             <>
               <span className="mx-1">·</span>
               <span>{formatNumber(item.metadata.views)}播放</span>
             </>
           )}
-          {!isBilibili && item.author.followers && (
+          {!isBilibili && item.author?.followers && (
             <>
               <span className="mx-1">·</span>
               <span>粉丝 {formatNumber(item.author.followers)}</span>

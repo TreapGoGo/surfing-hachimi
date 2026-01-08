@@ -1,4 +1,4 @@
-import { ContentItem } from '../../shared/types';
+import type { ContentItem } from '../../shared/types';
 
 export class ZhihuCollector {
   /**
