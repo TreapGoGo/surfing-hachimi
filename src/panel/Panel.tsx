@@ -123,11 +123,9 @@ export default function Panel() {
         </button>
         <button 
           onClick={() => {
-            if (chrome && chrome.tabs) {
-              chrome.tabs.create({ url: 'dashboard.html' });
-            } else {
-              window.open('dashboard.html', '_blank');
-            }
+            const url = chrome.runtime.getURL('dashboard.html');
+            chrome.tabs.create({ url });
+            window.close();
           }}
           className="flex items-center justify-center gap-2 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
         >
