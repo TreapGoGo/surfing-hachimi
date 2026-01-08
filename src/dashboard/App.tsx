@@ -4,7 +4,8 @@ import TimeCapsule from './components/TimeCapsule';
 import DeletePanel from './components/DeletePanel';
 import SettingsPage from './components/SettingsPage';
 import ResonanceLab from './pages/ResonanceLab';
-import Toast, { ToastType } from '@/shared/components/Toast';
+import Toast from '@/shared/components/Toast';
+import type { ToastType } from '@/shared/components/Toast';
 import { Search, Filter, Loader2, Trash2, ListChecks, X, ChevronDown } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { getAllItems, clearAllItems, deleteItemsBefore, deleteMultipleItems } from '@/shared/db';
@@ -97,7 +98,7 @@ export default function App() {
     return (now - itemTime) <= timeFilter.ms;
   });
 
-  const loadData = async () => {
+  const handleClearAll = async () => {
     try {
       setIsDisintegrating(true);
       // Wait for animation to play out (1.5s total duration, we wait 1.2s to start clearing)
