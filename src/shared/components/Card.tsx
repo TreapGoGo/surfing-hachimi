@@ -1,6 +1,7 @@
 import type { ContentItem, ActionType } from '@/shared/types';
 import { getLevel } from '@/shared/utils/score';
 import { cn } from '@/shared/utils/cn';
+import { formatContentForCopy } from '@/shared/utils/format';
 import { MessageSquare, ThumbsUp, Star, Coins, Zap, Clock, Copy, Check } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -9,9 +10,12 @@ import { useState } from 'react';
 interface CardProps {
   item: ContentItem;
   className?: string;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
-export default function Card({ item, className }: CardProps) {
+export default function Card({ item, className, isSelectMode, isSelected, onSelect }: CardProps) {
   const [copied, setCopied] = useState(false);
   const isBilibili = item.platform === 'bilibili';
   const score = item.metadata?.score || 0;
@@ -26,11 +30,19 @@ export default function Card({ item, className }: CardProps) {
 
   const formattedTime = formatDistanceToNow(item.lastUpdated || Date.now(), { addSuffix: true, locale: zhCN });
 
+  const handleClick = (e: React.MouseEvent) => {
+    if (isSelectMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelect?.();
+    }
+  };
+
   const handleCopy = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
-    const text = `问题：${item.title}\n链接：${item.url}\n作者：${item.author.name}\n\n正文：\n${item.fullContent || item.contentExcerpt}`;
+    const text = formatContentForCopy(item);
     
     try {
       await navigator.clipboard.writeText(text);
@@ -42,7 +54,15 @@ export default function Card({ item, className }: CardProps) {
   };
 
   return (
-    <div className={cn("bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow", className)}>
+    <div 
+      onClick={handleClick}
+      className={cn(
+        "bg-white rounded-lg shadow-sm border overflow-hidden hover:shadow-md transition-all cursor-pointer relative",
+        isSelectMode ? "ring-2 ring-transparent" : "",
+        isSelected ? "ring-blue-500 border-blue-500 shadow-lg shadow-blue-100/50" : "border-slate-100",
+        className
+      )}
+    >
       {/* Bilibili Cover */}
       {isBilibili && item.cover && (
         <div className="relative aspect-video bg-slate-100">

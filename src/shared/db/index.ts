@@ -152,6 +152,14 @@ export async function deleteItem(id: string) {
   return db.delete('items', id);
 }
 
+export async function deleteMultipleItems(ids: string[]) {
+  const db = await initDB();
+  const tx = db.transaction('items', 'readwrite');
+  const store = tx.objectStore('items');
+  await Promise.all(ids.map(id => store.delete(id)));
+  await tx.done;
+}
+
 /**
  * 分层采样获取共鸣候选集
  * High Pool: score >= 7 (随机取50个)

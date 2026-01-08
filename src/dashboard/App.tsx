@@ -4,10 +4,12 @@ import TimeCapsule from './components/TimeCapsule';
 import DeletePanel from './components/DeletePanel';
 import SettingsPage from './components/SettingsPage';
 import ResonanceLab from './pages/ResonanceLab';
-import { Search, Filter, Loader2, Trash2 } from 'lucide-react';
+import Toast, { ToastType } from '@/shared/components/Toast';
+import { Search, Filter, Loader2, Trash2, ListChecks, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { getAllItems, clearAllItems, deleteItemsBefore } from '@/shared/db';
+import { getAllItems, clearAllItems, deleteItemsBefore, deleteMultipleItems } from '@/shared/db';
 import { getSettings, applySettingsToDOM } from '@/shared/utils/settings';
+import { formatContentForCopy } from '@/shared/utils/format';
 import type { ContentItem } from '@/shared/types';
 
 export default function App() {
@@ -15,6 +17,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [showDeletePanel, setShowDeletePanel] = useState(false);
   const [isDisintegrating, setIsDisintegrating] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
+    isVisible: false,
+    message: '',
+    type: 'success'
+  });
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.replace('#', '');
     return ['home', 'settings', 'search', 'archive', 'lab'].includes(hash) ? hash : 'home';
@@ -45,7 +54,18 @@ export default function App() {
       applySettingsToDOM(e.detail);
     };
     window.addEventListener('hachimi-settings-updated' as any, handleSettingsUpdate);
-    return () => window.removeEventListener('hachimi-settings-updated' as any, handleSettingsUpdate);
+    
+    // 监听 Toast 事件
+    const handleToastEvent = (e: any) => {
+      const { message, type = 'success' } = e.detail;
+      showToast(message, type);
+    };
+    window.addEventListener('hachimi-toast' as any, handleToastEvent);
+
+    return () => {
+      window.removeEventListener('hachimi-settings-updated' as any, handleSettingsUpdate);
+      window.removeEventListener('hachimi-toast' as any, handleToastEvent);
+    };
   }, []);
 
   const handleClearAll = async () => {
@@ -56,8 +76,10 @@ export default function App() {
       await clearAllItems();
       setItems([]);
       setShowDeletePanel(false);
+      showToast('所有记录已清空', 'success');
     } catch (e) {
       console.error('Failed to clear data', e);
+      showToast('清空失败', 'error');
     } finally {
       setIsDisintegrating(false);
     }
@@ -70,11 +92,74 @@ export default function App() {
       await deleteItemsBefore(timestamp);
       await loadData();
       setShowDeletePanel(false);
+      showToast('历史记录已清理', 'success');
     } catch (e) {
       console.error('Failed to clear data', e);
+      showToast('清理失败', 'error');
     } finally {
       setIsDisintegrating(false);
     }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(i => i !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    
+    try {
+      setIsDisintegrating(true);
+      // 等待消散动画
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      await deleteMultipleItems(selectedIds);
+      await loadData();
+      setSelectedIds([]);
+      setIsSelectMode(false);
+      showToast(`已成功删除 ${selectedIds.length} 项内容`, 'success');
+    } catch (e) {
+      console.error('Failed to delete items', e);
+      showToast('删除失败', 'error');
+    } finally {
+      setIsDisintegrating(false);
+    }
+  };
+
+  const showToast = (message: string, type: ToastType = 'success') => {
+    setToast({ isVisible: true, message, type });
+  };
+
+  const handleBatchCopy = async () => {
+    if (selectedIds.length === 0) return;
+    
+    const selectedItems = selectedIds
+      .map(id => items.find(item => item.id === id))
+      .filter((item): item is ContentItem => !!item);
+    
+    const text = selectedItems.map((item, index) => {
+      return formatContentForCopy(item, index + 1);
+    }).join('\n\n\n');
+
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(`已复制 ${selectedItems.length} 条内容`, 'success');
+      setIsSelectMode(false);
+      setSelectedIds([]);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+      showToast('复制失败', 'error');
+    }
+  };
+
+  const handleCancelSelect = () => {
+    setIsSelectMode(false);
+    setSelectedIds([]);
   };
 
   return (
@@ -96,6 +181,40 @@ export default function App() {
                 </div>
                 
                 <div className="flex items-center gap-3">
+                  {isSelectMode ? (
+                    <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-right-4">
+                      <span className="text-sm font-medium text-blue-600 mr-2">已选中 {selectedIds.length} 项</span>
+                      <button 
+                        onClick={handleBatchCopy}
+                        disabled={selectedIds.length === 0}
+                        className="px-3 py-1 bg-blue-500 text-white text-xs font-bold rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors shadow-sm"
+                      >
+                        批量复制
+                      </button>
+                      <button 
+                        onClick={handleBatchDelete}
+                        disabled={selectedIds.length === 0 || isDisintegrating}
+                        className="px-3 py-1 bg-rose-500 text-white text-xs font-bold rounded-lg hover:bg-rose-600 disabled:opacity-50 transition-colors shadow-sm"
+                      >
+                        批量删除
+                      </button>
+                      <button 
+                        onClick={handleCancelSelect}
+                        className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setIsSelectMode(true)}
+                      className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-100 transition-all shadow-sm group"
+                      title="开启多选模式"
+                    >
+                      <ListChecks size={18} className="group-active:scale-90 transition-transform" />
+                    </button>
+                  )}
+
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                     <input 
@@ -129,7 +248,13 @@ export default function App() {
                     <p className="text-sm">暂无记录，快去知乎或B站逛逛吧 🏄</p>
                   </div>
                 ) : (
-                  <Waterfall items={items} isDisintegrating={isDisintegrating} />
+                  <Waterfall 
+                    items={items} 
+                    isSelectMode={isSelectMode}
+                    selectedIds={selectedIds}
+                    onToggleSelect={handleToggleSelect}
+                    isDisintegrating={isDisintegrating} 
+                  />
                 )}
               </div>
             </div>
@@ -160,6 +285,11 @@ export default function App() {
           isDisintegrating={isDisintegrating}
         />
       )}
+
+      <Toast 
+        {...toast} 
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
+      />
 
       {/* Disintegration Animation CSS */}
       <style>{`
