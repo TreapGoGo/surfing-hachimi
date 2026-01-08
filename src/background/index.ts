@@ -84,19 +84,28 @@ chrome.runtime.onMessage.addListener((message: any, sender: chrome.runtime.Messa
     return false;
   }
 
-  if (message.type === 'OPEN_SIDE_PANEL') {
-    // Open side panel
-    if (chrome.sidePanel && chrome.sidePanel.open) {
-       if (sender.tab?.id) {
-         chrome.sidePanel.open({ tabId: sender.tab.id });
-       } else {
-         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  if (message.type === 'OPEN_SIDE_PANEL' || message.type === 'TOGGLE_SIDE_PANEL') {
+    // 尝试与侧边栏通信，看它是否已经打开
+    chrome.runtime.sendMessage({ type: 'CHECK_SIDE_PANEL_ALIVE' }).then(() => {
+      // 如果侧边栏响应了，说明它已打开，现在需要关闭它
+      if (message.type === 'TOGGLE_SIDE_PANEL') {
+        chrome.runtime.sendMessage({ type: 'CLOSE_SIDE_PANEL' }).catch(() => {});
+      }
+    }).catch(() => {
+      // 如果侧边栏没有响应（报错），说明它没打开，现在打开它
+      if (chrome.sidePanel && chrome.sidePanel.open) {
+        if (sender.tab?.id) {
+          chrome.sidePanel.open({ tabId: sender.tab.id });
+        } else {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs[0]?.id) {
-                chrome.sidePanel.open({ tabId: tabs[0].id });
+              chrome.sidePanel.open({ tabId: tabs[0].id });
             }
-         });
-       }
-    }
+          });
+        }
+      }
+    });
+    return false;
   }
 });
 

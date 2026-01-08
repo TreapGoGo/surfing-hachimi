@@ -1,4 +1,3 @@
-import { Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import FeedbackPanel from './FeedbackPanel';
 import { logger } from '@/shared/utils/logger';
@@ -7,10 +6,13 @@ export default function FloatingBall() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [currentItemId, setCurrentItemId] = useState<string | null>(null);
 
+  // 辅助函数：检查插件上下文是否有效
+  const isContextValid = () => {
+    return typeof chrome !== 'undefined' && !!chrome.runtime && !!chrome.runtime.id;
+  };
+
   useEffect(() => {
     const handleShowFeedback = (e: CustomEvent) => {
-      // 只有在没有显示的时候才弹出，避免频繁打扰
-      // 或者：每次都重置计时器？这里简单处理，如果已经显示了就不管了，或者替换ID
       const { id } = e.detail || {};
       if (id) {
         setCurrentItemId(id);
@@ -46,6 +48,22 @@ export default function FloatingBall() {
     window.dispatchEvent(event);
   };
 
+  const handleButtonClick = () => {
+    if (!isContextValid()) {
+      console.warn('[Hachimi] 插件上下文已失效，请刷新页面以恢复功能。');
+      return;
+    }
+
+    try {
+      // 发送切换侧边栏的消息
+      chrome.runtime.sendMessage({ type: 'TOGGLE_SIDE_PANEL' }).catch(err => {
+        console.warn('[Hachimi] 发送消息失败，可能插件已更新:', err);
+      });
+    } catch (e) {
+      console.error('[Hachimi] 发送消息异常:', e);
+    }
+  };
+
   return (
     <div className="fixed right-4 bottom-20 z-[9999] font-sans group">
       {showFeedback && (
@@ -58,17 +76,16 @@ export default function FloatingBall() {
       
       <button 
         type="button"
-        onClick={() => {
-           // Send message to background to open side panel
-           // Note: chrome.sidePanel.open requires user gesture, 
-           // but messaging background might lose that context in some versions.
-           // However, clicking this button IS a user gesture.
-           chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' });
-        }}
-        className="w-12 h-12 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-all hover:scale-110 active:scale-95"
-        title="哈基米冲浪助手"
+        onClick={handleButtonClick}
+        className="w-12 h-12 bg-white text-blue-600 rounded-full shadow-lg flex items-center justify-center hover:bg-slate-50 transition-all hover:scale-110 active:scale-95 border-2 border-blue-500/10"
+        title="哈基米冲浪助手 (点击开关侧边栏)"
       >
-        <Zap size={24} />
+        <img 
+          src={isContextValid() ? chrome.runtime.getURL('logo.png') : ''} 
+          alt="Hachimi" 
+          className="w-8 h-8 object-contain opacity-90"
+          style={{ filter: !isContextValid() ? 'grayscale(100%)' : 'none' }}
+        />
       </button>
       
       {/* Tooltip/Label on hover */}

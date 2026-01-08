@@ -124,6 +124,16 @@ export default function App() {
     };
     window.addEventListener('hachimi-toast' as any, handleToastEvent);
 
+    // 监听来自后台脚本的消息（用于开关侧边栏）
+    const handleRuntimeMessage = (message: any, sender: any, sendResponse: any) => {
+      if (message.type === 'CHECK_SIDE_PANEL_ALIVE') {
+        sendResponse({ alive: true });
+      } else if (message.type === 'CLOSE_SIDE_PANEL') {
+        window.close();
+      }
+    };
+    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+
     // 监听外部点击以关闭筛选器
     const handleClickOutside = (e: MouseEvent) => {
       if (timeFilterRef.current && !timeFilterRef.current.contains(e.target as Node)) {
@@ -142,6 +152,7 @@ export default function App() {
     return () => {
       window.removeEventListener('hachimi-settings-updated' as any, handleSettingsUpdate);
       window.removeEventListener('hachimi-toast' as any, handleToastEvent);
+      chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
