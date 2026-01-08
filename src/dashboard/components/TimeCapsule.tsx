@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { getLevel } from '@/shared/utils/score';
 import { getResonanceCandidates, updateItemStats } from '@/shared/db';
-import { selectCapsuleItems } from '../utils/algorithm';
+import { selectCapsuleItems, calculateResonanceWeight } from '../utils/algorithm';
 
 // Remove items prop, TimeCapsule handles its own data
 interface TimeCapsuleProps {}
@@ -198,9 +198,12 @@ export default function TimeCapsule({}: TimeCapsuleProps) {
       
       // 2. Select Items (Weighted Random)
       const selected = selectCapsuleItems(candidates, 3);
-      setRandomItems(selected);
       
-      // 3. Update stats for selected items (Silent update)
+      // 3. 按照卡片分数 (metadata.score) 从高到低排序
+      const sorted = [...selected].sort((a, b) => (b.metadata?.score || 0) - (a.metadata?.score || 0));
+      setRandomItems(sorted);
+      
+      // 4. Update stats for selected items (Silent update)
       // Mark them as "shown" so cooling can start
       selected.forEach(item => {
         updateItemStats(item.id, {
